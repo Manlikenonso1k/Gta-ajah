@@ -2,7 +2,42 @@
 
 An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. It's built with **Godot 4.7** (using its built-in Jolt physics engine), and its 3D assets are made in **Blender 4.5 LTS**.
 
-> **Status:** early prototype. The city, buildings and characters are simple placeholder shapes generated from code. They will be replaced with Blender models over time.
+> **Status:** early prototype. The city, buildings and characters are simple placeholder shapes generated from code; the vehicles are realistic test models downloaded from Sketchfab.
+
+---
+
+## Progress log (read this first)
+
+This section is the handoff note between work sessions. It's kept current so a new session can pick up the work without reading the whole codebase. **Update it at the end of every step.**
+
+### Current task: Android support (from `prompt.md`)
+
+Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range phone (about 4 GB RAM, Mali or Adreno GPU), without changing desktop keyboard and mouse play. Commit after each step.
+
+| # | Step | Status |
+|---|---|---|
+| 1 | Audit car models and asset sizes | ✅ Done, see [Asset audit](#asset-audit) |
+| 2 | Touch controls (`scenes/touch_controls.tscn`, `scripts/touch_controls.gd`) | ⏳ Next |
+| 3 | Quality presets Low / Medium / High | ⬜ |
+| 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ⬜ |
+| 5 | Project settings: ETC2/ASTC, landscape | ⬜ |
+| 6 | Android export preset and README "Android build" section | ⬜ |
+| 7 | Tests: touch test, phone checklist | ⬜ |
+
+### Where things are (quick map)
+
+- `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the sky/sun/fog, spawns the city, cars, pedestrians and player, and draws the on-screen text.
+- `scripts/car.gd`: drivable `VehicleBody3D`. Gets its meshes from `scripts/vehicle_model.gd`, which loads a `.glb` from `assets/models/cars/real/`, scales it from a per-model config, and cuts the wheels out of the mesh at load time. **Don't change the handling values in `car.gd`.**
+- `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
+- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/view_vehicle.gd` (renders vehicle views for measuring).
+
+### Decisions and gotchas so far
+
+- **Renderer:** Compatibility (OpenGL). Vulkan crashes on the dev Mac (2013 Intel Iris), and Compatibility is also the safe choice for Android.
+- **Lighting on the dev Mac:** the Intel Iris OpenGL driver ignores Godot's lights, so the game uses warm ambient light that looks right with or without the sun.
+- **Vehicle textures:** must be imported as VRAM Compressed; lossless textures made loading take 20 s instead of 0.7 s.
+- **Blender on the dev Mac (macOS 12):** glTF import and export fail because Blender 4.5's bundled numpy needs macOS 13.3. See [Troubleshooting](#troubleshooting).
+- **The prompt says "9 cars" and "preload() in car.gd":** both are out of date. There are now 13 parked vehicles (10 models), and models are loaded by `vehicle_model.gd`.
 
 ---
 
@@ -18,10 +53,11 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 8. [Blender asset pipeline](#blender-asset-pipeline)
 9. [Testing](#testing)
 10. [Pushing to GitHub](#pushing-to-github)
-11. [Troubleshooting](#troubleshooting)
-12. [Roadmap](#roadmap)
-13. [Credits](#credits)
-14. [A note on the name](#a-note-on-the-name)
+11. [Android and mobile](#android-and-mobile)
+12. [Troubleshooting](#troubleshooting)
+13. [Roadmap](#roadmap)
+14. [Credits](#credits)
+15. [A note on the name](#a-note-on-the-name)
 
 ---
 
@@ -388,6 +424,47 @@ git config http.postBuffer 524288000
 The vehicle models make the repo about 60 MB. GitHub refuses single files over 100 MB, so keep each model below that (or use Git LFS).
 
 `.gitignore` excludes `.godot/` (Godot's cache, which is rebuilt on import), `*.blend1`, `/build/` and `.DS_Store`.
+
+---
+
+## Android and mobile
+
+### Asset audit
+
+Measured 2026-10-22, before any mobile work. Triangle and texture counts were read by loading each model in Godot; the textures are what the materials actually use.
+
+| Model | Triangles | Textures (count × resolution) | `.glb` size |
+|---|---:|---|---:|
+| `corolla` | 84,398 | 27: 25 × 1024², 1 × 1024×512, 1 × 256² | 17.6 MB |
+| `town_bus` | 55,527 | 2: 1 × 1024², 1 × 1024×128 | 3.8 MB |
+| `sprinter` | 37,564 | 26: 26 × 1024² | 6.3 MB |
+| `camry` | 18,410 | 0 (plain colours) | 1.9 MB |
+| `bmw_e30` | 13,076 | 7: 7 × 1024² | 3.4 MB |
+| `benz_g` | 12,516 | 1: 128² | 0.6 MB |
+| `coach` | 11,210 | 5: 4 × 1024², 1 × 512×1024 | 1.3 MB |
+| `hiace` | 8,348 | 8: 2 × 512², 5 × 256², 1 × 128² | 0.6 MB |
+| `accord` | 6,222 | 18: up to 1024×128, mostly 256² or smaller | 0.6 MB |
+| `vw_t3` | 5,671 | 0 (plain colours) | 0.5 MB |
+
+**Total `assets/`: 60 MB.** The 10 biggest files:
+
+| Size | File |
+|---:|---|
+| 17.6 MB | `assets/models/cars/real/corolla.glb` |
+| 6.3 MB | `assets/models/cars/real/sprinter.glb` |
+| 3.8 MB | `assets/models/cars/real/town_bus.glb` |
+| 3.4 MB | `assets/models/cars/real/bmw_e30.glb` |
+| 1.9 MB | `assets/models/cars/real/camry.glb` |
+| 1.7 MB | `assets/models/cars/real/corolla_7.png` |
+| 1.3 MB | `assets/models/cars/real/coach.glb` |
+| 1.2 MB | `assets/models/cars/real/corolla_4.png` |
+| 1.1 MB | `assets/models/cars/real/sprinter_18.png` |
+| 1.0 MB | `assets/models/cars/real/corolla_18.png` |
+
+**What this means for phones:**
+- The Corolla, town bus and Sprinter need cutting down to the 8–15k triangle budget. The other seven are already near it.
+- Each texture is stored twice: embedded in its `.glb` and also unpacked as a `.png` by Godot's importer. The exported game only ships the imported copies.
+- With 13 parked vehicles, the scene holds roughly 330k vehicle triangles, which is too much for a mid-range phone.
 
 ---
 
