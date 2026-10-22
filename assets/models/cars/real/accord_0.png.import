@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://q6ukt6ms51hq"
 path.s3tc="res://.godot/imported/accord_0.png-ad96de97f0b339705a8b37d7339fd4aa.s3tc.ctex"
+path.etc2="res://.godot/imported/accord_0.png-ad96de97f0b339705a8b37d7339fd4aa.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cars/real/accord_0.png"
-dest_files=["res://.godot/imported/accord_0.png-ad96de97f0b339705a8b37d7339fd4aa.s3tc.ctex"]
+dest_files=["res://.godot/imported/accord_0.png-ad96de97f0b339705a8b37d7339fd4aa.s3tc.ctex", "res://.godot/imported/accord_0.png-ad96de97f0b339705a8b37d7339fd4aa.etc2.ctex"]
 
 [params]
 

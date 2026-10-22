@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://ch7mht3txa6mf"
 path.s3tc="res://.godot/imported/corolla_15.png-5292c8ab733ff91c83b91f47d9e090e8.s3tc.ctex"
+path.etc2="res://.godot/imported/corolla_15.png-5292c8ab733ff91c83b91f47d9e090e8.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cars/real/corolla_15.png"
-dest_files=["res://.godot/imported/corolla_15.png-5292c8ab733ff91c83b91f47d9e090e8.s3tc.ctex"]
+dest_files=["res://.godot/imported/corolla_15.png-5292c8ab733ff91c83b91f47d9e090e8.s3tc.ctex", "res://.godot/imported/corolla_15.png-5292c8ab733ff91c83b91f47d9e090e8.etc2.ctex"]
 
 [params]
 

@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://cep7sy6iud2fa"
 path.s3tc="res://.godot/imported/sprinter_24.png-c74c910d84fd964fd3ee825493be95ec.s3tc.ctex"
+path.etc2="res://.godot/imported/sprinter_24.png-c74c910d84fd964fd3ee825493be95ec.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cars/real/sprinter_24.png"
-dest_files=["res://.godot/imported/sprinter_24.png-c74c910d84fd964fd3ee825493be95ec.s3tc.ctex"]
+dest_files=["res://.godot/imported/sprinter_24.png-c74c910d84fd964fd3ee825493be95ec.s3tc.ctex", "res://.godot/imported/sprinter_24.png-c74c910d84fd964fd3ee825493be95ec.etc2.ctex"]
 
 [params]
 

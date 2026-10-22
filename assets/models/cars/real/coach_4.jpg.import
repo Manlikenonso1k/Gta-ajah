@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://d0iu2kesxfgyt"
 path.s3tc="res://.godot/imported/coach_4.jpg-65a61f544f6cc0f2ab7ed6c2894c5dda.s3tc.ctex"
+path.etc2="res://.godot/imported/coach_4.jpg-65a61f544f6cc0f2ab7ed6c2894c5dda.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/cars/real/coach_4.jpg"
-dest_files=["res://.godot/imported/coach_4.jpg-65a61f544f6cc0f2ab7ed6c2894c5dda.s3tc.ctex"]
+dest_files=["res://.godot/imported/coach_4.jpg-65a61f544f6cc0f2ab7ed6c2894c5dda.s3tc.ctex", "res://.godot/imported/coach_4.jpg-65a61f544f6cc0f2ab7ed6c2894c5dda.etc2.ctex"]
 
 [params]
 
