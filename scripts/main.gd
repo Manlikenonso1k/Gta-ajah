@@ -11,6 +11,7 @@ const TouchControls = preload("res://scripts/touch_controls.gd")
 const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 
 const Quality = preload("res://scripts/quality.gd")
+const PhoneMenu = preload("res://scripts/phone_menu.gd")
 
 ## Models from VehicleModel.MODELS, cycled through the spawn points
 const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
@@ -19,6 +20,9 @@ const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace",
 var _player: CharacterBody3D
 var _hud: Label
 var _touch: Control = null
+var _vehicle_name: Label
+var _phone: PanelContainer
+var _paused := false
 
 
 func _ready() -> void:
@@ -64,13 +68,14 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	var text := "WASD move · Shift run · Space jump · E enter car · R ragdoll · Esc free mouse"
-	if _touch != null:
-		text = "Left thumb: move · drag right side: look"
+	var text := ""
 	if _player.car != null:
 		var speed := roundi(_player.car.linear_velocity.length() * 3.6)
-		text = ("%d km/h" % speed) if _touch != null else "WASD drive · Space handbrake · E get out    %d km/h" % speed
+		text = "%d km/h" % speed
 	_hud.text = text
+	_vehicle_name.visible = _player.car != null
+	if _player.car != null:
+		_vehicle_name.text = _car_title(_player.car.model)
 
 
 func _spawn_car(xform: Transform3D, model: String) -> void:
@@ -144,11 +149,114 @@ func _setup_hud(rig: Node3D) -> void:
 	_hud.add_theme_color_override("font_outline_color", Color.BLACK)
 	_hud.add_theme_constant_override("outline_size", 6)
 	layer.add_child(_hud)
+	_vehicle_name = Label.new()
+	_vehicle_name.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_vehicle_name.position = Vector2(-300, 22)
+	_vehicle_name.size = Vector2(280, 42)
+	_vehicle_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_vehicle_name.add_theme_font_size_override("font_size", 24)
+	_vehicle_name.add_theme_color_override("font_color", Color(1.0, 0.82, 0.28))
+	_vehicle_name.add_theme_color_override("font_outline_color", Color(0.08, 0.07, 0.05))
+	_vehicle_name.add_theme_constant_override("outline_size", 6)
+	_vehicle_name.visible = false
+	layer.add_child(_vehicle_name)
 
 	if TouchControls.wanted():
 		_touch = TouchControlsScene.instantiate()
 		_touch.camera_rig = rig
 		_touch.player = _player
 		layer.add_child(_touch)
+		_touch.menu_requested.connect(_toggle_pause)
 		# Keep the text clear of notches
 		_hud.position = _touch.safe_rect().position + Vector2(16, 12)
+	_build_phone_menu(layer)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and not event.is_echo():
+		_toggle_pause()
+		get_viewport().set_input_as_handled()
+
+
+func _toggle_pause() -> void:
+	_paused = not _paused
+	_phone.visible = _paused
+	get_tree().paused = _paused
+	if _touch != null:
+		_touch.release_all()
+		# Let the in-game phone's Resume button receive taps while the world is paused.
+		_touch.visible = not _paused
+	if not OS.has_feature("mobile"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _paused else Input.MOUSE_MODE_CAPTURED
+
+
+func _build_phone_menu(layer: CanvasLayer) -> void:
+	_phone = PanelContainer.new()
+	_phone.set_script(PhoneMenu)
+	_phone.connect("resume_requested", _toggle_pause)
+	_phone.visible = false
+	_phone.process_mode = Node.PROCESS_MODE_ALWAYS
+	_phone.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_layout_phone()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.045, 0.075, 0.08, 0.97)
+	style.border_color = Color(0.82, 0.67, 0.31)
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(22)
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 20
+	style.content_margin_bottom = 20
+	_phone.add_theme_stylebox_override("panel", style)
+	layer.add_child(_phone)
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", 10)
+	_phone.add_child(layout)
+	var heading := Label.new()
+	heading.text = "GARDEN CITY  /  PHONE"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 22)
+	heading.add_theme_color_override("font_color", Color(0.95, 0.77, 0.34))
+	layout.add_child(heading)
+	var sub := Label.new()
+	sub.text = "PAUSED  •  QUICK GUIDE"
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", Color(0.55, 0.84, 0.72))
+	layout.add_child(sub)
+	var guide_scroll := ScrollContainer.new()
+	guide_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	guide_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	layout.add_child(guide_scroll)
+	var hints := Label.new()
+	hints.text = "ON FOOT\nWASD / arrows   Move\nShift   Run\nSpace   Jump\nE / F   Enter or exit vehicle\nR   Ragdoll\nMouse   Look around\n\nIN A VEHICLE\nW / S   Accelerate / brake\nA / D   Steer\nSpace   Handbrake\nE / F   Exit vehicle\n\nPHONE CONTROLS\nLeft stick   Move / drive\nDrag right side   Look\nTouch buttons   Jump, run, enter, ragdoll"
+	hints.add_theme_font_size_override("font_size", 16)
+	hints.add_theme_color_override("font_color", Color(0.88, 0.92, 0.89))
+	hints.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	guide_scroll.add_child(hints)
+	var resume := Button.new()
+	resume.text = "RESUME GAME"
+	resume.custom_minimum_size.y = 48
+	resume.pressed.connect(_toggle_pause)
+	layout.add_child(resume)
+	var footer := Label.new()
+	footer.text = "ESC / BACK  •  Garden City Stories"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_font_size_override("font_size", 12)
+	layout.add_child(footer)
+	get_viewport().size_changed.connect(_layout_phone)
+
+
+func _layout_phone() -> void:
+	if _phone == null:
+		return
+	var view := get_viewport().get_visible_rect().size
+	_phone.size = Vector2(minf(410.0, view.x * 0.84), minf(580.0, view.y * 0.9))
+	_phone.position = (view - _phone.size) / 2.0
+
+
+func _car_title(model: String) -> String:
+	var names := {"corolla": "TOYOTA COROLLA", "camry": "TOYOTA CAMRY", "benz_g": "MERCEDES G-CLASS",
+		"bmw_e30": "BMW E30", "accord": "HONDA ACCORD", "sprinter": "MERCEDES SPRINTER",
+		"hiace": "TOYOTA HIACE", "vw_t3": "VW T3 DANFO", "town_bus": "CITY BUS", "coach": "LUXURY COACH"}
+	return names.get(model, model.to_upper())

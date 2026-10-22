@@ -19,17 +19,17 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | 1 | Audit car models and asset sizes | ✅ Done, see [Asset audit](#asset-audit) |
 | 2 | Touch controls (`scenes/touch_controls.tscn`, `scripts/touch_controls.gd`) | ✅ Done. Shown on touchscreens, or on desktop with `godot --path . -- --touch` |
 | 3 | Quality presets Low / Medium / High | ✅ Done. `scripts/quality.gd`; see [Quality presets](#quality-presets) |
-| 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ⏳ Next |
-| 5 | Project settings: ETC2/ASTC, landscape | ⬜ |
-| 6 | Android export preset and README "Android build" section | ⬜ |
-| 7 | Tests: touch test, phone checklist | ⬜ |
+| 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ✅ Done; 10 models, max 12k triangles where source models exceeded that |
+| 5 | Project settings: ETC2/ASTC, landscape | ✅ Done |
+| 6 | Android export preset and README "Android build" section | ✅ Configured; APK export needs local Android SDK/JDK/templates |
+| 7 | Tests: touch test, phone checklist | ✅ Desktop smoke, fake-touch and pause-menu tests pass; phone test remains |
 
 ### Where things are (quick map)
 
-- `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the sky/sun/fog, spawns the city, cars, pedestrians and player, and draws the on-screen text.
-- `scripts/car.gd`: drivable `VehicleBody3D`. Gets its meshes from `scripts/vehicle_model.gd`, which loads a `.glb` from `assets/models/cars/real/`, scales it from a per-model config, and cuts the wheels out of the mesh at load time. **Don't change the handling values in `car.gd`.**
+- `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the sky/sun/fog, spawns the city, cars, pedestrians and player, and builds the HUD and phone pause menu.
+- `scripts/car.gd`: drivable `VehicleBody3D`. Gets its meshes from `scripts/vehicle_model.gd`, which loads a `.glb` from `assets/models/cars/real/` or `assets/models/cars/mobile/` on mobile, scales it from a per-model config, and cuts the wheels out of the mesh at load time. **Don't change the handling values in `car.gd`.**
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
-- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/view_vehicle.gd` (renders vehicle views for measuring).
+- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/touch_controls_test.gd` (fake touch input check), `tests/view_vehicle.gd` (renders vehicle views for measuring).
 
 ### Decisions and gotchas so far
 
@@ -70,7 +70,7 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 - **Pedestrians:** 30 people wander the sidewalks.
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
-- **Display:** an on-screen line showing the controls, plus your speed in km/h while driving.
+- **Display:** vehicle names and speed while driving, plus a pause screen styled like an in-game phone with all control hints.
 
 ---
 
@@ -239,15 +239,16 @@ The first launch can take longer while Godot compiles its shaders.
 
 ## Controls
 
-| Action | On foot | In a car |
-|---|---|---|
-| Move or drive | W A S D / arrow keys | W accelerate, S brake/reverse, A D steer |
-| Run | Shift | — |
-| Jump / handbrake | Space | Space |
-| Enter or exit a car | E (or F) near a car | E (or F) |
-| Ragdoll yourself | R | — |
-| Look around | Mouse | Mouse |
-| Release the mouse | Esc (click to capture it again) | Esc |
+| Action | On foot | In a car | Mobile |
+|---|---|---|---|
+| Move or drive | W A S D / arrow keys | W accelerate, S brake/reverse, A D steer | Left stick |
+| Run | Shift | — | Run button (toggle) |
+| Jump / handbrake | Space | Space | Jump / Brake button |
+| Enter or exit a car | E (or F) near a car | E (or F) | Car button |
+| Ragdoll yourself | R | — | Fall button |
+| Look around | Mouse | Mouse | Drag right side |
+| Pause / button hints | Esc | Esc | MENU button |
+| Release the mouse | Esc (click to capture it again) | Esc | — |
 
 Input actions are registered in code (`scripts/main.gd` → `_setup_input`), so they don't appear in the editor's Input Map.
 
@@ -261,20 +262,28 @@ gta-portharcourt/
 ├── scenes/
 │   └── main.tscn          # Entry scene: a single node running scripts/main.gd
 ├── scripts/
-│   ├── main.gd            # Input, sky/sun/fog, spawns city, player, cars, pedestrians, display text
+│   ├── main.gd            # Input, sky/sun/fog, spawns city and builds HUD/phone pause menu
 │   ├── city.gd            # Generated placeholder city (blocks, roads, buildings, palms)
 │   ├── player.gd          # Player movement, entering cars, ragdoll and getting back up
 │   ├── car.gd             # VehicleBody3D car, controls, hitting pedestrians
-│   ├── vehicle_model.gd   # Vehicle model list; scales models and cuts out their wheels
+│   ├── vehicle_model.gd   # Loads/scales models and separates wheel geometry
+│   ├── touch_controls.gd  # Mobile joystick, look drag and action buttons
+│   ├── phone_menu.gd      # Pause phone continues to receive input while paused
+│   └── quality.gd        # Low / Medium / High graphics presets
 │   ├── pedestrian.gd      # Wandering pedestrian
 │   ├── ragdoll.gd         # Shared humanoid body: visual, walk animation, physics ragdoll
 │   └── camera_rig.gd      # Third-person orbit camera with spring arm
 ├── assets/
 │   └── models/            # Blender exports (.glb) go here
-│       └── cars/real/     # Sketchfab vehicles (CC BY), see CREDITS.md there
-├── blender/               # Blender Python scripts that generate assets
+│       └── cars/
+│           ├── real/      # Full-detail Sketchfab vehicles (CC BY), see CREDITS.md
+│           └── mobile/    # Reduced mobile copies generated by Blender
+├── blender/
+│   └── make_mobile_cars.py
 ├── tests/
 │   ├── smoke_test.gd      # Automated gameplay test that runs without a window
+│   ├── touch_controls_test.gd # Fake screen touches check action press/release
+│   ├── phone_menu_test.gd  # Pause, Back/Esc, and resume flow
 │   └── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
 └── README.md
 ```
@@ -361,11 +370,13 @@ To add a vehicle:
 
 **Where to get models:** Sketchfab has many free, realistic, downloadable cars (free account needed). Check each one's license: CC BY needs a credit, and NonCommercial ones can't go in a game you sell. Models from GTA mod sites are usually ripped from other games: fine for private testing, but don't publish them.
 
-Assets can also be generated by Python scripts, without opening Blender:
+Assets can also be generated by Python scripts, without opening Blender. To build the optimized phone car copies, run:
 
 ```bash
-blender -b --python blender/<script>.py
+blender -b --python blender/make_mobile_cars.py
 ```
+
+This reads model measurements from `assets/models/cars/vehicles.json`, leaves the originals untouched, decimates each model to at most about 12k triangles where possible, caps textures at 1024 px and writes GLBs to `assets/models/cars/mobile/`. Godot extracts their embedded images during import; the committed settings keep those images VRAM compressed for desktop and ETC2/ASTC for Android.
 
 Scripts in `blender/` should save their output to `assets/models/`. Keep Blender's backup files (`*.blend1`) out of git; `.gitignore` already does this.
 
@@ -382,6 +393,8 @@ An automated test spawns the world without opening a window, ragdolls the player
 
 ```bash
 godot --headless --path . --script tests/smoke_test.gd
+godot --headless --path . --script tests/touch_controls_test.gd
+godot --headless --path . --script tests/phone_menu_test.gd
 ```
 
 Expected output:
@@ -429,6 +442,44 @@ The vehicle models make the repo about 60 MB. GitHub refuses single files over 1
 ---
 
 ## Android and mobile
+
+### Android build
+
+The project includes an **Android Debug (arm64)** preset in `export_presets.cfg`. It targets landscape, uses the Compatibility renderer, and excludes `assets/models/cars/real/` so only the generated mobile car models ship. Create those models first with Blender 4.5 LTS:
+
+```bash
+blender -b --python blender/make_mobile_cars.py
+godot --headless --path . --import
+```
+
+For Godot 4.7.2 desktop export, install **OpenJDK 17** and the Android SDK packages listed in the [Godot 4.7 Android export guide](https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_android.html): Platform-Tools 35.0.0 or later, Build-Tools 35.0.1, Android Platform 35, Command-line Tools (latest), CMake 3.10.2.4988404 and NDK 28.1.13356709. In Godot Editor Settings → Export → Android, set the Java SDK and Android SDK paths. Install the matching **4.7.2 export templates** from Editor → Manage Export Templates.
+
+Create a local debug key (do not add this file or its passwords to git):
+
+```bash
+mkdir -p ~/.android
+keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android \
+  -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+  -dname "CN=Android Debug,O=Android,C=US"
+```
+
+Set this file and its standard debug alias/password in the Android preset's **Keystore / Debug** fields in Godot. The committed preset intentionally leaves all signing fields blank. `.gitignore` excludes keystores and `export_credentials.cfg`.
+
+To install over USB, enable Developer options and USB debugging on the phone, connect it, accept the phone's authorization prompt, and confirm `adb devices` lists it. In Godot, select **Android Debug (arm64)** in Project → Export and use **One Click Deploy**. The ordinary debug APK export path is `build/android-debug.apk`.
+
+### Mobile controls
+
+The on-screen MENU opens a pause screen styled like an in-game phone. It contains the keyboard, mouse and touch control hints. Tap **RESUME GAME** to continue; Esc or the Android Back action also opens/closes it.
+
+### Phone test checklist
+
+On the phone, play for at least 10 minutes and send back:
+
+- Phone model and Android version
+- Average FPS and the lowest FPS you notice in a busy area
+- Whether the joystick, look drag, action buttons, pause phone and Resume button work
+- Heat after 10 minutes (cool / warm / hot) and any crash count or error message
+- Which vehicle you drove, especially whether both rear wheels render fully
 
 ### Asset audit
 

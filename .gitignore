@@ -10,3 +10,4 @@ export_credentials.cfg
 
 # Godot extracts these embedded mobile-model textures from each GLB on import.
 assets/models/cars/mobile/*_Image_*.png
+assets/models/cars/mobile/*_Image_*.jpg

@@ -22,6 +22,7 @@ const LOOK_PIXELS_PER_SCREEN := 900.0
 ## Thumb-sized buttons: about 14 mm across, but between 7% and 13% of the
 ## screen height, so they stay usable on tablets and tiny phones
 const BUTTON_MM := 14.0
+const MENU_SIZE := 38.0
 
 const STICK_ACTIONS := ["move_left", "move_right", "move_forward", "move_back"]
 
@@ -37,6 +38,9 @@ var _was_in_car := false
 var _unit := 60.0
 var _safe := Rect2()
 var _buttons := {}
+var _menu_center := Vector2.ZERO
+
+signal menu_requested
 
 
 ## True when the controls should be shown on this device.
@@ -75,6 +79,7 @@ func _layout() -> void:
 		"interact": corner + Vector2(0.3, -2.6) * _unit,
 		"ragdoll": corner + Vector2(-2.3, -2.3) * _unit,
 	}
+	_menu_center = _safe.position + Vector2(_unit * 1.5, _unit * 1.5)
 	_stick_center = _stick_rest()
 	queue_redraw()
 
@@ -116,6 +121,11 @@ func _input(event: InputEvent) -> void:
 
 
 func _touch_down(index: int, pos: Vector2) -> void:
+	if pos.distance_to(_menu_center) <= MENU_SIZE:
+		_fingers[index] = "menu"
+		menu_requested.emit()
+		queue_redraw()
+		return
 	for button in _visible_buttons():
 		if pos.distance_to(_buttons[button]) <= _unit * (0.8 if button == "ragdoll" else 1.0) * 1.15:
 			_fingers[index] = button
@@ -217,6 +227,9 @@ func _draw() -> void:
 	draw_circle(_stick_center, radius, Color(1, 1, 1, 0.12))
 	draw_arc(_stick_center, radius, 0, TAU, 48, Color(1, 1, 1, 0.35), 3.0)
 	draw_circle(_stick_center + _stick_vector * radius, radius * 0.42, Color(1, 1, 1, 0.45))
+	draw_circle(_menu_center, MENU_SIZE, Color(0.04, 0.07, 0.08, 0.72))
+	draw_arc(_menu_center, MENU_SIZE, 0, TAU, 40, Color(0.9, 0.75, 0.35, 0.8), 2.0)
+	draw_string(font, _menu_center + Vector2(-MENU_SIZE * 0.55, MENU_SIZE * 0.15), "MENU", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
 
 	var labels := {"jump": "Brake" if _in_car() else "Jump", "run": "Run", "interact": "Exit" if _in_car() else "Car", "ragdoll": "Fall"}
 	var held: Array = _fingers.values()
