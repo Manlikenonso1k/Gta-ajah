@@ -25,7 +25,9 @@ func _ready() -> void:
 	camera.fov = 70
 	camera.far = 1500
 	_arm.add_child(camera)
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Phones have no mouse to capture; looking around comes from touch_controls.gd
+	if not OS.has_feature("mobile"):
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func follow(node: Node3D, follow_height: float, in_vehicle := false) -> void:
@@ -34,11 +36,22 @@ func follow(node: Node3D, follow_height: float, in_vehicle := false) -> void:
 	vehicle_mode = in_vehicle
 
 
+## Turns the camera by `relative` pixels of mouse-style movement. Touch drags
+## call this too, so both rotate the camera the same way.
+func look(relative: Vector2) -> void:
+	yaw -= relative.x * SENSITIVITY
+	pitch = clampf(pitch - relative.y * SENSITIVITY, -1.2, 0.5)
+	_mouse_idle = 0.0
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	# Mouse events that Godot generates from touches would fight the touch
+	# controls (a finger on the joystick would also turn the camera), and the
+	# capture/Esc behaviour makes no sense without a real mouse.
+	if event.device == InputEvent.DEVICE_ID_EMULATION or OS.has_feature("mobile"):
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		yaw -= event.relative.x * SENSITIVITY
-		pitch = clampf(pitch - event.relative.y * SENSITIVITY, -1.2, 0.5)
-		_mouse_idle = 0.0
+		look(event.relative)
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed:

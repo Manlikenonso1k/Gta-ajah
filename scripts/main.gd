@@ -7,6 +7,8 @@ const CameraRig = preload("res://scripts/camera_rig.gd")
 const Player = preload("res://scripts/player.gd")
 const Car = preload("res://scripts/car.gd")
 const Pedestrian = preload("res://scripts/pedestrian.gd")
+const TouchControls = preload("res://scripts/touch_controls.gd")
+const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 
 const PEDESTRIANS := 30
 ## Models from VehicleModel.MODELS, cycled through the spawn points
@@ -15,6 +17,7 @@ const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace",
 
 var _player: CharacterBody3D
 var _hud: Label
+var _touch: Control = null
 
 
 func _ready() -> void:
@@ -44,13 +47,16 @@ func _ready() -> void:
 	_player.position = Vector3(City.road_line(3) - 1, 0.2, 5)
 	add_child(_player)
 
-	_setup_hud()
+	_setup_hud(rig)
 
 
 func _process(_delta: float) -> void:
 	var text := "WASD move · Shift run · Space jump · E enter car · R ragdoll · Esc free mouse"
+	if _touch != null:
+		text = "Left thumb: move · drag right side: look"
 	if _player.car != null:
-		text = "WASD drive · Space handbrake · E get out    %d km/h" % roundi(_player.car.linear_velocity.length() * 3.6)
+		var speed := roundi(_player.car.linear_velocity.length() * 3.6)
+		text = ("%d km/h" % speed) if _touch != null else "WASD drive · Space handbrake · E get out    %d km/h" % speed
 	_hud.text = text
 
 
@@ -116,7 +122,7 @@ func _setup_environment() -> void:
 	add_child(sun)
 
 
-func _setup_hud() -> void:
+func _setup_hud(rig: Node3D) -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	_hud = Label.new()
@@ -125,3 +131,11 @@ func _setup_hud() -> void:
 	_hud.add_theme_color_override("font_outline_color", Color.BLACK)
 	_hud.add_theme_constant_override("outline_size", 6)
 	layer.add_child(_hud)
+
+	if TouchControls.wanted():
+		_touch = TouchControlsScene.instantiate()
+		_touch.camera_rig = rig
+		_touch.player = _player
+		layer.add_child(_touch)
+		# Keep the text clear of notches
+		_hud.position = _touch.safe_rect().position + Vector2(16, 12)

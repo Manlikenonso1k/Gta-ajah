@@ -17,8 +17,8 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | # | Step | Status |
 |---|---|---|
 | 1 | Audit car models and asset sizes | ✅ Done, see [Asset audit](#asset-audit) |
-| 2 | Touch controls (`scenes/touch_controls.tscn`, `scripts/touch_controls.gd`) | ⏳ Next |
-| 3 | Quality presets Low / Medium / High | ⬜ |
+| 2 | Touch controls (`scenes/touch_controls.tscn`, `scripts/touch_controls.gd`) | ✅ Done. Shown on touchscreens, or on desktop with `godot --path . -- --touch` |
+| 3 | Quality presets Low / Medium / High | ⏳ Next |
 | 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ⬜ |
 | 5 | Project settings: ETC2/ASTC, landscape | ⬜ |
 | 6 | Android export preset and README "Android build" section | ⬜ |
@@ -37,6 +37,7 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 - **Lighting on the dev Mac:** the Intel Iris OpenGL driver ignores Godot's lights, so the game uses warm ambient light that looks right with or without the sun.
 - **Vehicle textures:** must be imported as VRAM Compressed; lossless textures made loading take 20 s instead of 0.7 s.
 - **Blender on the dev Mac (macOS 12):** glTF import and export fail because Blender 4.5's bundled numpy needs macOS 13.3. See [Troubleshooting](#troubleshooting).
+- **Touch input:** `touch_controls.gd` reads `InputEventScreenTouch`/`Drag` in `_input()` and presses the normal input actions (`Input.action_press` with analog strength). Godot also turns touches into fake mouse events; `camera_rig.gd` ignores those (`event.device == InputEvent.DEVICE_ID_EMULATION`) and skips mouse capture and Esc on mobile. Touch look goes through `camera_rig.look()`, the same function the mouse uses. Run is a toggle on touch, so the right thumb stays free for looking.
 - **The prompt says "9 cars" and "preload() in car.gd":** both are out of date. There are now 13 parked vehicles (10 models), and models are loaded by `vehicle_model.gd`.
 
 ---
