@@ -38,6 +38,8 @@ func _run() -> void:
 	ped.colors = {"skin": Color.BROWN, "shirt": Color.WHITE, "pants": Color.BLACK}
 	ped.position = car.global_position + car.global_basis.z * 30.0 + Vector3(0, 0.2, 0)
 	main.add_child(ped)
+	# Stand still so a random wander direction can't take it out of the car's path
+	ped.set_physics_process(false)
 	var before := get_nodes_in_group("ragdolls").size()
 	# Cars drive along their local +Z
 	Input.action_press("move_forward")

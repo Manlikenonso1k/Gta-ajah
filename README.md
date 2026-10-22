@@ -42,7 +42,7 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 | Item | Version |
 |---|---|
-| Computer | MacBook Pro, Intel (x86_64) |
+| Computer | MacBook Pro 2013 (MacBookPro11,1), Intel (x86_64), Intel Iris graphics |
 | Operating system | macOS 12.7.6 Monterey |
 | Game engine | Godot **4.7.2** stable (standard build, not .NET) |
 | 3D software | Blender **4.5.15 LTS** |
@@ -56,6 +56,7 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 ### Why these versions
 
+- **Renderer:** the project uses Godot's **Compatibility** (OpenGL) renderer. The Vulkan-based Forward+ renderer crashes on older Intel Macs, because MoltenVK fails to allocate GPU memory on the Intel Iris/HD driver (`MTLIGAccelDevice newHeapWithDescriptor` → `SIGABRT`).
 - **Godot 4.7** includes **Jolt Physics**, which this project uses for the car, the ragdolls and collisions. The project needs Godot **4.4 or newer**; older 4.x versions don't have the Jolt setting.
 - **Blender 4.5 LTS** is the last Blender release that supports **Intel Macs**; Blender 5.x only runs on Apple Silicon. Everyone working on the project should use **Blender 4.5 LTS**, because `.blend` files saved in Blender 5.x may not open in 4.5.
 
@@ -326,7 +327,8 @@ If a push is rejected with **"fetch first"**, someone changed the repo on GitHub
 | Blender prints Python errors about `sys.prefix` | You're starting it through a symlink. Use the launcher script from [Installation](#installation). |
 | Blender 5.x won't open on an Intel Mac | Expected: use Blender 4.5 LTS. |
 | The project opens but physics settings look wrong | You're on Godot older than 4.4. Install 4.7.2. |
-| Low frame rate | In `scripts/main.gd`, lower `directional_shadow_max_distance` or set `sun.shadow_enabled = false`. You can also try the "Mobile" renderer in Project Settings. |
+| Low frame rate | In `scripts/main.gd`, lower `directional_shadow_max_distance` or set `sun.shadow_enabled = false`. A smaller window size in `project.godot` also helps. |
+| Godot crashes on launch (`SIGABRT` in `Metal` / `MTLIGAccelDevice` / `vkAllocateMemory`) | Your GPU can't run Vulkan through MoltenVK. The project already uses the OpenGL Compatibility renderer, so open it directly with `godot --path . -e`. To open the Project Manager, run `godot --rendering-driver opengl3`. |
 | The mouse is stuck | Press **Esc** to release it. |
 | Homebrew says "No developer tools installed" | Not needed for this project. If you want Homebrew anyway, run `xcode-select --install`. |
 
