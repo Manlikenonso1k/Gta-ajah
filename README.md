@@ -458,12 +458,12 @@ Create a local debug key (do not add this file or its passwords to git):
 
 ```bash
 mkdir -p ~/.android
-keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android \
-  -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+keytool -genkeypair -v -keystore ~/.android/debug.keystore \
+  -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
   -dname "CN=Android Debug,O=Android,C=US"
 ```
 
-Set this file and its standard debug alias/password in the Android preset's **Keystore / Debug** fields in Godot. The committed preset intentionally leaves all signing fields blank. `.gitignore` excludes keystores and `export_credentials.cfg`.
+Enter the keystore password interactively and enter the same value when `keytool` asks for the key password; Godot requires the two to match. Set the file, alias and password in the Android preset's **Keystore / Debug** fields in Godot. The committed preset intentionally leaves all signing fields blank. `.gitignore` excludes keystores and `export_credentials.cfg`.
 
 To install over USB, enable Developer options and USB debugging on the phone, connect it, accept the phone's authorization prompt, and confirm `adb devices` lists it. In Godot, select **Android Debug (arm64)** in Project → Export and use **One Click Deploy**. The ordinary debug APK export path is `build/android-debug.apk`.
 
