@@ -261,7 +261,11 @@ The camera's spring arm only collides with layer 1, so it never snaps in front o
 
 - Characters face **−Z**; their position is at the **feet**.
 - Cars face **+Z**. This is a convention of Godot's `VehicleBody3D`.
-- 1 unit = 1 metre. Cars weigh 1200 kg, and the ragdoll parts add up to about 68 kg.
+- 1 unit = 1 metre. Vehicles weigh from 1200 kg (BMW E30) to 13,000 kg (coach), set per model in `scripts/vehicle_model.gd`. The ragdoll parts add up to about 68 kg.
+
+### Parking
+
+`scripts/city.gd` parks 3 vehicles on each of the 4 inner north–south roads, one per block, so even a 12 m coach fits and nothing spawns on top of anything else. The middle block is kept clear for the car you start next to.
 
 ### Ragdolls
 
@@ -274,10 +278,13 @@ At most 25 ragdolls exist at once; the oldest is removed when a new one spawns.
 
 ### Car tuning (in `scripts/car.gd`)
 
+Values are for a 1200 kg car (`BASE_MASS`). Engine force, brakes and suspension strength are multiplied by `mass / 1200`, so a 13 t coach accelerates about like a car instead of crawling.
+
 | Setting | Value | Effect |
 |---|---|---|
 | `ENGINE` | 2500 | Engine force per rear wheel (rear-wheel drive) |
 | `BRAKE` / `HANDBRAKE` | 25 / 40 | Braking strength |
+| `suspension_max_force` | 12000 | Strongest push one wheel's spring can give |
 | `MAX_STEER` | 0.55 rad | Steering angle at low speed (drops to 0.2 at high speed) |
 | `TOP_SPEED` | 45 m/s | About 160 km/h |
 | `HIT_SPEED` | 4 m/s | Speed needed to knock a character into a ragdoll |
@@ -372,6 +379,14 @@ git push -u origin main
 
 If a push is rejected with **"fetch first"**, someone changed the repo on GitHub. Run `git pull --rebase`, then push again.
 
+If a big push (for example new models) fails with **"the remote end hung up unexpectedly"**, raise git's upload buffer for this repo and push again:
+
+```bash
+git config http.postBuffer 524288000
+```
+
+The vehicle models make the repo about 60 MB. GitHub refuses single files over 100 MB, so keep each model below that (or use Git LFS).
+
 `.gitignore` excludes `.godot/` (Godot's cache, which is rebuilt on import), `*.blend1`, `/build/` and `.DS_Store`.
 
 ---
@@ -395,7 +410,9 @@ If a push is rejected with **"fetch first"**, someone changed the repo on GitHub
 
 ## Roadmap
 
-- [ ] Blender car models (Toyota Corolla, yellow keke, danfo bus, okada)
+- [x] Realistic test vehicles: Corolla, Camry, G-Class, E30, Accord, Hiace, Sprinter, VW T3, town bus, coach (downloaded from Sketchfab)
+- [ ] Our own Blender models to replace them, plus a keke, a proper danfo and an okada
+- [ ] Lexus RX and Toyota Sienna (the downloaded models were broken: missing wheels)
 - [ ] A rigged and animated character model, with a ragdoll built on its skeleton
 - [ ] Port Harcourt landmarks: Garrison roundabout, the waterfront and creeks, Mile 1 market
 - [ ] AI traffic and smarter pedestrians
