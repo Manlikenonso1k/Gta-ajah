@@ -2,17 +2,34 @@ extends VehicleBody3D
 ## Drivable car. Forward is +Z (VehicleBody3D convention).
 ## Knocks characters into ragdolls when it hits them at speed.
 
-const Ragdoll = preload("res://scripts/ragdoll.gd")
-
 const ENGINE := 2500.0
 const BRAKE := 25.0
 const HANDBRAKE := 40.0
 const MAX_STEER := 0.55
 const TOP_SPEED := 45.0
 const HIT_SPEED := 4.0
+const REST_LENGTH := 0.2
 
-var paint := Color(0.8, 0.1, 0.1)
+## Kenney Car Kit models (CC0): body plus four wheels named wheel-front-left
+## etc., facing +Z, about 2/3 real size.
+const MODELS := {
+	"sedan": preload("res://assets/models/cars/kenney/sedan.glb"),
+	"sedan_sports": preload("res://assets/models/cars/kenney/sedan-sports.glb"),
+	"hatchback": preload("res://assets/models/cars/kenney/hatchback-sports.glb"),
+	"suv": preload("res://assets/models/cars/kenney/suv.glb"),
+	"suv_luxury": preload("res://assets/models/cars/kenney/suv-luxury.glb"),
+	"taxi": preload("res://assets/models/cars/kenney/taxi.glb"),
+	"police": preload("res://assets/models/cars/kenney/police.glb"),
+	"van": preload("res://assets/models/cars/kenney/van.glb"),
+	"delivery": preload("res://assets/models/cars/kenney/delivery.glb"),
+	"truck": preload("res://assets/models/cars/kenney/truck.glb"),
+	"ambulance": preload("res://assets/models/cars/kenney/ambulance.glb"),
+}
+const MODEL_SCALE := 1.5
+
+var model := "sedan"
 var driver: Node = null
+var _half_width := 0.9
 
 
 func _ready() -> void:
@@ -23,27 +40,34 @@ func _ready() -> void:
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0, 0.25, 0)
 
+	var visual: Node3D = MODELS[model].instantiate()
+	visual.scale = Vector3.ONE * MODEL_SCALE
+	add_child(visual)
+
+	# Collision box follows the body, raised a little so it doesn't scrape the road
+	var body: MeshInstance3D = visual.get_node("body")
+	var aabb := body.get_aabb()
+	aabb.position = (aabb.position + body.position) * MODEL_SCALE
+	aabb.size *= MODEL_SCALE
+	_half_width = aabb.size.x / 2
+	var clearance := 0.15
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(1.8, 0.7, 4.2)
+	box.size = aabb.size - Vector3(0, clearance, 0)
 	shape.shape = box
-	shape.position.y = 0.75
+	shape.position = aabb.get_center() + Vector3(0, clearance / 2, 0)
 	add_child(shape)
 
-	_part(Vector3(1.8, 0.55, 4.2), Vector3(0, 0.7, 0), paint)
-	_part(Vector3(1.6, 0.5, 2.1), Vector3(0, 1.22, -0.2), Color(0.08, 0.1, 0.12))
-	_part(Vector3(1.5, 0.08, 1.9), Vector3(0, 1.5, -0.2), paint)
-	for x in [-0.6, 0.6]:
-		_part(Vector3(0.35, 0.15, 0.05), Vector3(x, 0.8, 2.11), Color(1, 0.95, 0.8), true)
-		_part(Vector3(0.35, 0.12, 0.05), Vector3(x, 0.8, -2.11), Color(0.8, 0.05, 0.05), true)
-
-	for w in [[-0.85, 1.35, true], [0.85, 1.35, true], [-0.85, -1.35, false], [0.85, -1.35, false]]:
+	# Each wheel mesh moves into a VehicleWheel3D so it spins and steers
+	for wheel_mesh: MeshInstance3D in visual.find_children("wheel-*", "MeshInstance3D"):
+		var front := wheel_mesh.name.begins_with("wheel-front")
 		var wheel := VehicleWheel3D.new()
-		wheel.position = Vector3(w[0], 0.5, w[1])
-		wheel.use_as_steering = w[2]
-		wheel.use_as_traction = not w[2]
-		wheel.wheel_radius = 0.36
-		wheel.wheel_rest_length = 0.2
+		# Suspension settles about halfway under the car's weight
+		wheel.position = wheel_mesh.position * MODEL_SCALE + Vector3(0, REST_LENGTH / 2, 0)
+		wheel.use_as_steering = front
+		wheel.use_as_traction = not front
+		wheel.wheel_radius = wheel_mesh.get_aabb().size.y / 2 * MODEL_SCALE
+		wheel.wheel_rest_length = REST_LENGTH
 		wheel.suspension_travel = 0.2
 		wheel.suspension_stiffness = 40.0
 		wheel.suspension_max_force = 12000.0
@@ -51,45 +75,21 @@ func _ready() -> void:
 		wheel.damping_relaxation = 2.0
 		wheel.wheel_friction_slip = 3.0
 		wheel.wheel_roll_influence = 0.1
-		var tyre := MeshInstance3D.new()
-		var cylinder := CylinderMesh.new()
-		cylinder.top_radius = 0.36
-		cylinder.bottom_radius = 0.36
-		cylinder.height = 0.25
-		tyre.mesh = cylinder
-		tyre.material_override = Ragdoll.material(Color(0.06, 0.06, 0.06))
-		tyre.rotation.z = PI / 2
-		wheel.add_child(tyre)
 		add_child(wheel)
+		wheel_mesh.reparent(wheel, false)
+		wheel_mesh.transform = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * MODEL_SCALE), Vector3.ZERO)
 
 	var bumper := Area3D.new()
 	bumper.collision_layer = 0
 	bumper.collision_mask = 4
 	var bumper_shape := CollisionShape3D.new()
 	var bumper_box := BoxShape3D.new()
-	bumper_box.size = Vector3(2.2, 1.6, 4.8)
+	bumper_box.size = aabb.size + Vector3(0.4, 0.4, 0.6)
 	bumper_shape.shape = bumper_box
-	bumper_shape.position.y = 0.8
+	bumper_shape.position = aabb.get_center()
 	bumper.add_child(bumper_shape)
 	bumper.body_entered.connect(_on_bumper_body_entered)
 	add_child(bumper)
-
-
-func _part(size: Vector3, pos: Vector3, color: Color, glow := false) -> void:
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	if glow:
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = color
-		mat.emission_enabled = true
-		mat.emission = color
-		mesh.material_override = mat
-	else:
-		mesh.material_override = Ragdoll.material(color)
-	mesh.position = pos
-	add_child(mesh)
 
 
 func start_driving(new_driver: Node) -> void:
@@ -125,7 +125,7 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("interact"):
 		# Driver gets out on the left (+X when facing +Z)
-		var exit_pos := global_position + global_basis.x * 1.8 + Vector3.UP * 0.3
+		var exit_pos := global_position + global_basis.x * (_half_width + 0.8) + Vector3.UP * 0.3
 		var leaving := driver
 		driver = null
 		leaving.exit_car(exit_pos)

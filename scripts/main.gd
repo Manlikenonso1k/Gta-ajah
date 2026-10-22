@@ -9,8 +9,9 @@ const Car = preload("res://scripts/car.gd")
 const Pedestrian = preload("res://scripts/pedestrian.gd")
 
 const PEDESTRIANS := 30
-const CAR_COLORS := [Color(0.8, 0.1, 0.1), Color(0.95, 0.95, 0.95), Color(0.1, 0.1, 0.12),
-	Color(0.85, 0.65, 0.1), Color(0.15, 0.3, 0.65), Color(0.5, 0.52, 0.55)]
+## Models from car.gd MODELS, cycled through the spawn points
+const CAR_MODELS := ["sedan", "taxi", "suv_luxury", "hatchback", "van", "police",
+	"sedan_sports", "suv", "delivery", "ambulance", "truck"]
 
 var _player: CharacterBody3D
 var _hud: Label
@@ -27,9 +28,9 @@ func _ready() -> void:
 	var rig := CameraRig.new()
 	add_child(rig)
 
-	_spawn_car(Transform3D(Basis(Vector3.UP, PI), Vector3(City.road_line(3) + 3, 0.6, 0)), CAR_COLORS[0])
+	_spawn_car(Transform3D(Basis(Vector3.UP, PI), Vector3(City.road_line(3) + 3, 0.6, 0)), CAR_MODELS[0])
 	for i in spawns["parking"].size():
-		_spawn_car(spawns["parking"][i], CAR_COLORS[(i + 1) % CAR_COLORS.size()])
+		_spawn_car(spawns["parking"][i], CAR_MODELS[(i + 1) % CAR_MODELS.size()])
 
 	var points: Array = spawns["sidewalk"]
 	for i in mini(PEDESTRIANS, points.size()):
@@ -53,9 +54,9 @@ func _process(_delta: float) -> void:
 	_hud.text = text
 
 
-func _spawn_car(xform: Transform3D, color: Color) -> void:
+func _spawn_car(xform: Transform3D, model: String) -> void:
 	var car := Car.new()
-	car.paint = color
+	car.model = model
 	car.transform = xform
 	add_child(car)
 
@@ -92,6 +93,10 @@ func _setup_environment() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	# Mostly warm daylight rather than blue sky, so colours stay true. Older
+	# Intel Macs (OpenGL) often drop the sun entirely, leaving only ambient.
+	env.ambient_light_color = Color(1.0, 0.95, 0.85)
+	env.ambient_light_sky_contribution = 0.35
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.glow_enabled = true
 	# Humid Niger Delta haze
