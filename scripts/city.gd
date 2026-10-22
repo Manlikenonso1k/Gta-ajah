@@ -69,10 +69,18 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 				else:
 					spawns["sidewalk"].append(c + p + Vector3(0, 0.2, 0))
 
-	# Parked cars along the kerb, alternating road direction
+	# Parked cars along the kerb, alternating road direction. Each road has one
+	# slot per block, so a 12 m bus fits; the middle block is kept clear for
+	# the player's car.
 	for k in range(1, GRID):
-		for n in 2:
-			var z := rng.randf_range(-HALF + 20, HALF - 20)
+		var slots := [0, 1, 3, 4]
+		for i in range(slots.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var swap = slots[i]
+			slots[i] = slots[j]
+			slots[j] = swap
+		for n in 3:
+			var z := block_center(0, slots[n]).z + rng.randf_range(-8, 8)
 			var pos := Vector3(road_line(k) + ROAD / 2 - 1.6, 0.6, z)
 			spawns["parking"].append(Transform3D(Basis(Vector3.UP, PI if n == 0 else 0.0), pos))
 	return spawns

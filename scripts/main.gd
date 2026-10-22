@@ -9,9 +9,9 @@ const Car = preload("res://scripts/car.gd")
 const Pedestrian = preload("res://scripts/pedestrian.gd")
 
 const PEDESTRIANS := 30
-## Models from car.gd MODELS, cycled through the spawn points
-const CAR_MODELS := ["sedan", "taxi", "suv_luxury", "hatchback", "van", "police",
-	"sedan_sports", "suv", "delivery", "ambulance", "truck"]
+## Models from VehicleModel.MODELS, cycled through the spawn points
+const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
+	"sprinter", "town_bus", "coach"]
 
 var _player: CharacterBody3D
 var _hud: Label

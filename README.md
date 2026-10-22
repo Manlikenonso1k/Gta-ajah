@@ -29,7 +29,7 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 - **City:** a generated 5×5 grid of city blocks with roads and yellow centre lines. Buildings come in cream, terracotta, pale blue and ochre, with dark window bands on each floor. There are palm trees, red laterite earth beyond the city, and a hazy tropical sky.
 - **Third-person player:** walks, runs and jumps relative to the camera, with simple arm and leg swing animation.
-- **Cars:** 9 drivable cars using low-poly models from Kenney's Car Kit (sedan, taxi, luxury SUV, hatchback, van, police and more), with suspension, spinning and steering wheels, steering that gets less sharp at speed, brakes and a handbrake. Press E to get in or out.
+- **Vehicles:** 13 drivable vehicles across 10 realistic models from Sketchfab: Toyota Corolla, Camry and Hiace, Mercedes G-Class and Sprinter, BMW E30, Honda Accord, a VW T3 danfo, a town bus and a coach. Each has suspension, spinning and steering wheels, handling scaled to its weight, steering that gets less sharp at speed, brakes and a handbrake. Press E to get in or out.
 - **Pedestrians:** 30 people wander the sidewalks.
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
@@ -228,15 +228,17 @@ gta-portharcourt/
 │   ├── city.gd            # Generated placeholder city (blocks, roads, buildings, palms)
 │   ├── player.gd          # Player movement, entering cars, ragdoll and getting back up
 │   ├── car.gd             # VehicleBody3D car, controls, hitting pedestrians
+│   ├── vehicle_model.gd   # Vehicle model list; scales models and cuts out their wheels
 │   ├── pedestrian.gd      # Wandering pedestrian
 │   ├── ragdoll.gd         # Shared humanoid body: visual, walk animation, physics ragdoll
 │   └── camera_rig.gd      # Third-person orbit camera with spring arm
 ├── assets/
 │   └── models/            # Blender exports (.glb) go here
-│       └── cars/kenney/   # Kenney Car Kit vehicles (CC0), loaded by scripts/car.gd
+│       └── cars/real/     # Sketchfab vehicles (CC BY), see CREDITS.md there
 ├── blender/               # Blender Python scripts that generate assets
 ├── tests/
-│   └── smoke_test.gd      # Automated gameplay test that runs without a window
+│   ├── smoke_test.gd      # Automated gameplay test that runs without a window
+│   └── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
 └── README.md
 ```
 
@@ -294,20 +296,26 @@ Blender makes the models; Godot runs the game.
 
 ### Adding a car
 
-`scripts/car.gd` builds a drivable car from any `.glb` laid out like the Kenney models:
+Downloaded car models come in every scale, facing any direction, and usually have their wheels merged into the body. `scripts/vehicle_model.gd` copes with all of that. You give it a few numbers per model; at load time it scales and turns the model, then cuts the wheel triangles out of the mesh so they can spin and steer. (The two passes take under a second for all ten vehicles.)
 
-- The model faces **+Z**, with its origin on the ground at the centre of the car.
-- One object named **`body`** and four named **`wheel-front-left`**, **`wheel-front-right`**, **`wheel-back-left`** and **`wheel-back-right`**. Each wheel's origin must be at its centre (its axle).
+To add a vehicle:
 
-The collision box, wheel positions and wheel size are read from the model, so no measuring is needed. To add one:
+1. **Download** it as `.glb` into `assets/models/cars/real/`, named like `lexus_es.glb`. On Sketchfab, filter by *Downloadable* and prefer models under about 100k triangles. Check that it actually has four wheels; some don't. Run `godot --headless --path . --import` once afterwards.
+2. **Render a measuring view**, giving the real length in metres and a guess at the yaw (0 or 90):
+   ```bash
+   godot --path . --script tests/view_vehicle.gd -- raw lexus_es 4.9 0
+   ```
+   This saves a side view on a 0.5 m grid to `~/Library/Application Support/Godot/app_userdata/GTA Port Harcourt/vehicle_views/` (on Windows: `%APPDATA%\Godot\app_userdata\GTA Port Harcourt\vehicle_views\`). The car should lie lengthwise with its **front on the left**. If it's sideways, add 90 to the yaw; if it's backwards, add 180.
+3. **Read off the wheels**: front and rear axle z (the red vertical line is z = 0, left is +), the wheel-centre height and the tyre radius, all in metres.
+4. **Add an entry** to `MODELS` in `scripts/vehicle_model.gd`, for example
+   `"lexus_es": {"length": 4.9, "yaw": 0, "wheels": [1.45, -1.40, 0.34, 0.34], "mass": 1600},`
+   then add `"lexus_es"` to `CAR_MODELS` in `scripts/main.gd`.
+5. **Check the cut**: `godot --path . --script tests/view_vehicle.gd -- car lexus_es` draws the separated wheels in magenta. If bits of tyre stay black, raise the radius a little; for twin rear tyres (trucks, buses) raise `"width"`.
+6. **Credit the author** in `assets/models/cars/real/CREDITS.md` if the license is CC BY.
 
-1. Put the `.glb` in `assets/models/cars/` (with its textures, if any).
-2. Add it to `MODELS` in `scripts/car.gd`, for example `"keke": preload("res://assets/models/cars/keke.glb")`.
-3. Add its name to `CAR_MODELS` in `scripts/main.gd` so it spawns in the city.
+**Texture import:** set each model's textures to *VRAM Compressed* (select the extracted `.png` files in Godot's FileSystem dock → Import tab → Compress Mode → VRAM Compressed → Reimport). The default (lossless) made the cars take 20 seconds to load instead of under one.
 
-Kenney models are about 2/3 real size, so `MODEL_SCALE` is 1.5. A model built at true scale in Blender needs a scale of 1.0, so give each model its own scale when you mix them.
-
-**Where to get models:** use ones that are licensed for reuse, such as CC0 packs from [Kenney](https://kenney.nl/assets) and [Quaternius](https://quaternius.com), or CC-BY models on Sketchfab (credit the author). Avoid GTA mod sites: most of those cars are ripped from other games and can't be redistributed in a public repo. Real brands (Mercedes, BMW, Toyota) are trademarks, so for a public release use made-up names and badge-less designs, as GTA does.
+**Where to get models:** Sketchfab has many free, realistic, downloadable cars (free account needed). Check each one's license: CC BY needs a credit, and NonCommercial ones can't go in a game you sell. Models from GTA mod sites are usually ripped from other games: fine for private testing, but don't publish them.
 
 Assets can also be generated by Python scripts, without opening Blender:
 
@@ -335,7 +343,7 @@ godot --headless --path . --script tests/smoke_test.gd
 Expected output:
 
 ```
-cars: 9  car y: 0.0
+cars: 13  car y: 0.0
 ragdoll pelvis y after 1.5s: 0.14  ragdolls: 1
 player back up: true  ragdolls: 0
 driving: true
@@ -373,6 +381,7 @@ If a push is rejected with **"fetch first"**, someone changed the repo on GitHub
 | Problem | Fix |
 |---|---|
 | `godot: command not found` | Open a new terminal, or run `source ~/.zshrc`. Check that `~/.local/bin/godot` exists. |
+| Blender can't import or export glTF on macOS 12: `numpy` error mentioning `_cblas_caxpy$NEWLAPACK` | Blender 4.5's bundled numpy needs macOS 13.3 or newer. This should fix it (not yet tried on the development Mac): install a numpy that works on macOS 12 into Blender's Python: `/Applications/Blender.app/Contents/Resources/4.5/python/bin/python3.11 -m pip install --upgrade --force-reinstall "numpy==1.26.4" --only-binary=:all: --target /Applications/Blender.app/Contents/Resources/4.5/python/lib/python3.11/site-packages`. Windows and newer Macs aren't affected. |
 | Blender prints Python errors about `sys.prefix` | You're starting it through a symlink. Use the launcher script from [Installation](#installation). |
 | Blender 5.x won't open on an Intel Mac | Expected: use Blender 4.5 LTS. |
 | The project opens but physics settings look wrong | You're on Godot older than 4.4. Install 4.7.2. |
@@ -399,7 +408,7 @@ If a push is rejected with **"fetch first"**, someone changed the repo on GitHub
 
 ## Credits
 
-- Vehicle models: [Car Kit](https://kenney.nl/assets/car-kit) by Kenney (www.kenney.nl), CC0. See `assets/models/cars/kenney/LICENSE.txt`.
+- Vehicle models: 10 models from Sketchfab by their authors, CC BY 4.0. See [assets/models/cars/real/CREDITS.md](assets/models/cars/real/CREDITS.md) for each author and source link.
 
 ---
 
