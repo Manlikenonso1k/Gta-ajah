@@ -28,6 +28,7 @@ const MODELS := {
 	"coach": {"length": 12.0, "yaw": 0, "wheels": [3.835, -2.645, 0.537, 0.537], "mass": 13000, "width": 1.0},
 }
 const DIR := "res://assets/models/cars/real/"
+const MOBILE_DIR := "res://assets/models/cars/mobile/"
 
 static var _cache := {}
 
@@ -39,7 +40,15 @@ static func build(key: String) -> Dictionary:
 	if _cache.has(key):
 		return _cache[key]
 	var cfg: Dictionary = MODELS[key]
-	var model: Node3D = load(DIR + key + ".glb").instantiate()
+	var model_path := (MOBILE_DIR if OS.has_feature("mobile") else DIR) + key + ".glb"
+	# Development builds can still run before the optional Blender asset pass.
+	if not ResourceLoader.exists(model_path):
+		model_path = DIR + key + ".glb"
+	var packed: PackedScene = load(model_path)
+	if packed == null:
+		push_error("Could not load vehicle model: " + model_path)
+		return {}
+	var model: Node3D = packed.instantiate()
 	var meshes := model.find_children("*", "MeshInstance3D", true, false)
 
 	# Same normalisation as tests/view_vehicle.gd, then drop the tyres onto y = 0
@@ -60,7 +69,9 @@ static func build(key: String) -> Dictionary:
 	for z in [w[0], w[1]]:
 		for side in [1.0, -1.0]:
 			centers.append(Vector3(side, radius, z))
-	var reach := radius * 1.04
+	# A slightly generous radius captures low-poly tyre triangles whose corners
+	# lie just outside the measured circle, especially the rear dual tyres.
+	var reach := radius * 1.18
 	var tyre_width: float = cfg.get("width", 0.75) * radius
 
 	# Pass 1: outer face of each tyre = furthest |x| inside its cylinder
@@ -96,8 +107,8 @@ static func build(key: String) -> Dictionary:
 	for i in 4:
 		hubs.append(Vector3(centers[i].x * (outer[i] - tyre_width / 2), radius, centers[i].z))
 
-	# Pass 2: a triangle belongs to a wheel when all three corners lie in that
-	# wheel's cylinder and within a tyre width of its outer face.
+	# Pass 2: classify by triangle centre. Requiring all three vertices to fit
+	# the cylinder clipped broad, low-poly tread faces and left rear tyres partial.
 	var body := []
 	var wheel_parts := [[], [], [], []]
 	for entry in surfaces:
@@ -115,7 +126,12 @@ static func build(key: String) -> Dictionary:
 			var a := indices[t]
 			var b := indices[t + 1]
 			var c3 := indices[t + 2]
-			var g := tags[a] if tags[a] >= 0 and tags[a] == tags[b] and tags[a] == tags[c3] else 4
+			var centroid := (pts[a] + pts[b] + pts[c3]) / 3.0
+			var g := _wheel_at(centroid, centers, reach)
+			if g >= 0 and absf(centroid.x) < outer[g] - tyre_width * 0.45:
+				g = -1
+			if g < 0:
+				g = 4
 			var group: PackedInt32Array = groups[g]
 			group.push_back(a)
 			group.push_back(b)
