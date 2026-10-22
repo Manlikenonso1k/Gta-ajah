@@ -36,14 +36,17 @@ static var _cache := {}
 ## Returns {"body": [[Mesh, Transform3D]], "wheels": [{"center", "radius",
 ## "front", "parts": [[Mesh, Transform3D]]}], "body_aabb": AABB, "mass": float}.
 ## Wheel part transforms are relative to the wheel centre.
-static func build(key: String) -> Dictionary:
-	if _cache.has(key):
-		return _cache[key]
+static func build(key: String, source_dir: String = "") -> Dictionary:
 	var cfg: Dictionary = MODELS[key]
-	var model_path := (MOBILE_DIR if OS.has_feature("mobile") else DIR) + key + ".glb"
+	var model_dir := source_dir
+	if model_dir.is_empty():
+		model_dir = MOBILE_DIR if OS.has_feature("mobile") else DIR
+	var model_path := model_dir + key + ".glb"
 	# Development builds can still run before the optional Blender asset pass.
 	if not ResourceLoader.exists(model_path):
 		model_path = DIR + key + ".glb"
+	if _cache.has(model_path):
+		return _cache[model_path]
 	var packed: PackedScene = load(model_path)
 	if packed == null:
 		push_error("Could not load vehicle model: " + model_path)
@@ -128,6 +131,17 @@ static func build(key: String) -> Dictionary:
 			var c3 := indices[t + 2]
 			var centroid := (pts[a] + pts[b] + pts[c3]) / 3.0
 			var g := _wheel_at(centroid, centers, reach)
+			# The centroid alone can assign large fender/body triangles to a
+			# wheel, making those panels rotate with it. Keep the wheel cut local
+			# to the tyre envelope while allowing low-poly tread corners to extend
+			# beyond the measured radius.
+			if g >= 0:
+				var radial_limit: float = centers[g].y * 1.3
+				for vertex_index in [a, b, c3]:
+					var vertex := pts[vertex_index]
+					if Vector2(vertex.y - centers[g].y, vertex.z - centers[g].z).length() > radial_limit:
+						g = -1
+						break
 			if g >= 0 and absf(centroid.x) < outer[g] - tyre_width * 0.45:
 				g = -1
 			if g < 0:
@@ -153,7 +167,7 @@ static func build(key: String) -> Dictionary:
 	for i in 4:
 		wheels.append({"center": hubs[i], "radius": radius, "front": i < 2, "parts": wheel_parts[i]})
 	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"])}
-	_cache[key] = result
+	_cache[model_path] = result
 	return result
 
 

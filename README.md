@@ -10,7 +10,7 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 This section is the handoff note between work sessions. It's kept current so a new session can pick up the work without reading the whole codebase. **Update it at the end of every step.**
 
-### Current task: Android support (from `prompt.md`)
+### Completed task: Android support
 
 Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range phone (about 4 GB RAM, Mali or Adreno GPU), without changing desktop keyboard and mouse play. Commit after each step.
 
@@ -24,12 +24,16 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | 6 | Android export preset and README "Android build" section | ✅ Configured; APK export needs local Android SDK/JDK/templates |
 | 7 | Tests: touch test, phone checklist | ✅ Desktop smoke, fake-touch and pause-menu tests pass; phone test remains |
 
+### Current task: vehicle visual fixes from `prompt.md`
+
+The first stage is complete: wheel extraction now rejects large body and fender triangles that used to be assigned to rotating tires. `tests/vehicle_tires_test.gd` audits all four extracted wheels on all 10 full-detail and 10 mobile models; all 80 wheel meshes pass. The Camry, town bus, coach and other representative models were also rendered with the wheels highlighted. The remaining prompt work is the vehicle-specific bottom racing HUD, entry/exit transitions and driver steering animation.
+
 ### Where things are (quick map)
 
 - `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the sky/sun/fog, spawns the city, cars, pedestrians and player, and builds the HUD and phone pause menu.
 - `scripts/car.gd`: drivable `VehicleBody3D`. Gets its meshes from `scripts/vehicle_model.gd`, which loads a `.glb` from `assets/models/cars/real/` or `assets/models/cars/mobile/` on mobile, scales it from a per-model config, and cuts the wheels out of the mesh at load time. **Don't change the handling values in `car.gd`.**
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
-- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/touch_controls_test.gd` (fake touch input check), `tests/view_vehicle.gd` (renders vehicle views for measuring).
+- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/touch_controls_test.gd` (fake touch input check), `tests/phone_menu_test.gd` (pause flow), `tests/vehicle_tires_test.gd` (all 10 real and mobile vehicle wheel meshes), and `tests/view_vehicle.gd` (renders vehicle views for measuring).
 
 ### Decisions and gotchas so far
 
@@ -284,7 +288,8 @@ gta-portharcourt/
 │   ├── smoke_test.gd      # Automated gameplay test that runs without a window
 │   ├── touch_controls_test.gd # Fake screen touches check action press/release
 │   ├── phone_menu_test.gd  # Pause, Back/Esc, and resume flow
-│   └── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
+│   ├── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
+│   └── vehicle_tires_test.gd # Audits all real and mobile tire meshes
 └── README.md
 ```
 
@@ -395,6 +400,13 @@ An automated test spawns the world without opening a window, ragdolls the player
 godot --headless --path . --script tests/smoke_test.gd
 godot --headless --path . --script tests/touch_controls_test.gd
 godot --headless --path . --script tests/phone_menu_test.gd
+godot --headless --path . --script tests/vehicle_tires_test.gd
+```
+
+The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. For a visual check with wheels highlighted in magenta:
+
+```bash
+godot --path . --script tests/view_vehicle.gd -- car camry town_bus coach
 ```
 
 Expected output:
