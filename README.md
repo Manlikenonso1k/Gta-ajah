@@ -128,7 +128,7 @@ blender --version                      # Blender 4.5.15 LTS
 
 ```bash
 cd ~/Documents
-git clone https://github.com/Manlikenonso1k/Gta-ajah.git
+git clone https://github.com/Manlikenonso1k/Gta-ajah.git gta-portharcourt
 cd gta-portharcourt
 ```
 
