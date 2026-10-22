@@ -10,7 +10,8 @@ const Pedestrian = preload("res://scripts/pedestrian.gd")
 const TouchControls = preload("res://scripts/touch_controls.gd")
 const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 
-const PEDESTRIANS := 30
+const Quality = preload("res://scripts/quality.gd")
+
 ## Models from VehicleModel.MODELS, cycled through the spawn points
 const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
 	"sprinter", "town_bus", "coach"]
@@ -21,8 +22,13 @@ var _touch: Control = null
 
 
 func _ready() -> void:
+	var quality := Quality.current()
+	print("Quality preset: ", Quality.current_name())
+	Ragdoll.max_ragdolls = quality["ragdolls"]
+	get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	get_viewport().scaling_3d_scale = quality["render_scale"]
 	_setup_input()
-	_setup_environment()
+	_setup_environment(quality)
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
@@ -30,16 +36,23 @@ func _ready() -> void:
 
 	var rig := CameraRig.new()
 	add_child(rig)
+	rig.camera.far = quality["draw_distance"]
 
+	# The car next to the player first, then parking spots up to the preset's
+	# count. Spots and pedestrians are picked evenly from their lists so smaller
+	# presets still spread across the whole city.
 	_spawn_car(Transform3D(Basis(Vector3.UP, PI), Vector3(City.road_line(3) + 3, 0.6, 0)), CAR_MODELS[0])
-	for i in spawns["parking"].size():
-		_spawn_car(spawns["parking"][i], CAR_MODELS[(i + 1) % CAR_MODELS.size()])
+	var parking: Array = spawns["parking"]
+	var parked := mini(parking.size(), quality["cars"] - 1)
+	for i in parked:
+		_spawn_car(parking[i * parking.size() / parked], CAR_MODELS[(i + 1) % CAR_MODELS.size()])
 
 	var points: Array = spawns["sidewalk"]
-	for i in mini(PEDESTRIANS, points.size()):
+	var walkers := mini(quality["pedestrians"], points.size())
+	for i in walkers:
 		var ped := Pedestrian.new()
 		ped.colors = Ragdoll.random_colors(rng)
-		ped.position = points[i]
+		ped.position = points[i * points.size() / walkers]
 		add_child(ped)
 
 	_player = Player.new()
@@ -87,7 +100,7 @@ func _setup_input() -> void:
 			InputMap.action_add_event(action, event)
 
 
-func _setup_environment() -> void:
+func _setup_environment(quality: Dictionary) -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color(0.3, 0.5, 0.78)
 	sky_material.sky_horizon_color = Color(0.82, 0.8, 0.74)
@@ -108,7 +121,7 @@ func _setup_environment() -> void:
 	# Humid Niger Delta haze
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.82, 0.8, 0.72)
-	env.fog_density = 0.0025
+	env.fog_density = quality["fog_density"]
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
@@ -117,8 +130,8 @@ func _setup_environment() -> void:
 	sun.rotation_degrees = Vector3(-50, 30, 0)
 	sun.light_color = Color(1.0, 0.95, 0.85)
 	sun.light_energy = 1.3
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 120
+	sun.shadow_enabled = quality["shadows"]
+	sun.directional_shadow_max_distance = quality["shadow_distance"]
 	add_child(sun)
 
 

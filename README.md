@@ -18,8 +18,8 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 |---|---|---|
 | 1 | Audit car models and asset sizes | ✅ Done, see [Asset audit](#asset-audit) |
 | 2 | Touch controls (`scenes/touch_controls.tscn`, `scripts/touch_controls.gd`) | ✅ Done. Shown on touchscreens, or on desktop with `godot --path . -- --touch` |
-| 3 | Quality presets Low / Medium / High | ⏳ Next |
-| 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ⬜ |
+| 3 | Quality presets Low / Medium / High | ✅ Done. `scripts/quality.gd`; see [Quality presets](#quality-presets) |
+| 4 | Mobile car models (Blender script → `assets/models/cars/mobile/`) | ⏳ Next |
 | 5 | Project settings: ETC2/ASTC, landscape | ⬜ |
 | 6 | Android export preset and README "Android build" section | ⬜ |
 | 7 | Tests: touch test, phone checklist | ⬜ |
@@ -467,6 +467,22 @@ Measured 2026-10-22, before any mobile work. Triangle and texture counts were re
 - Each texture is stored twice: embedded in its `.glb` and also unpacked as a `.png` by Godot's importer. The exported game only ships the imported copies.
 - With 13 parked vehicles, the scene holds roughly 330k vehicle triangles, which is too much for a mid-range phone.
 
+
+### Quality presets
+
+`scripts/quality.gd` holds three presets. Phones (`OS.has_feature("mobile")`) start on **Low**, desktops on **High**. To try another one, run `godot --path . -- --quality=low` (or `medium`, `high`); the chosen preset is printed at startup.
+
+| Setting | Low | Medium | High |
+|---|---:|---:|---:|
+| Pedestrians | 12 | 20 | 30 |
+| Vehicles | 6 | 9 | 13 |
+| Ragdoll limit | 8 | 15 | 25 |
+| Sun shadows | off | 60 m | 120 m |
+| Fog density | 0.006 (hides the short draw distance) | 0.004 | 0.0025 |
+| Draw distance | 250 m | 600 m | 1500 m |
+| 3D render resolution | 70% | 85% | 100% |
+
+The render resolution only scales the 3D scene (bilinear upscaling, which the Compatibility renderer supports, confirmed on Godot 4.7.2); the HUD and touch controls stay sharp. Reduced crowds and parked cars are spread evenly across the city instead of filling the first blocks.
 ---
 
 ## Troubleshooting

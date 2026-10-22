@@ -5,7 +5,8 @@ extends RefCounted
 
 const LAYER_RAGDOLL := 8
 const MASK_RAGDOLL := 1 | 2 | 8
-const MAX_RAGDOLLS := 25
+## Oldest ragdoll is removed past this many; main.gd sets it from the quality preset
+static var max_ragdolls := 25
 
 # name: [shape, size, centre, mass, colour slot]
 # box size = extents, capsule size = (radius, height), sphere size = (radius)
@@ -142,7 +143,7 @@ static func animate(limbs: Dictionary, phase: float, amount: float) -> void:
 ## Spawns a physics ragdoll matching a character at `xform` and returns its pelvis.
 static func spawn(parent: Node, xform: Transform3D, colors: Dictionary, velocity: Vector3) -> RigidBody3D:
 	var old := parent.get_tree().get_nodes_in_group("ragdolls")
-	if old.size() >= MAX_RAGDOLLS:
+	if old.size() >= max_ragdolls:
 		old[0].queue_free()
 
 	var root := Node3D.new()
