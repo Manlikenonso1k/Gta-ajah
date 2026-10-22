@@ -1,0 +1,10 @@
+# Normalize line endings so Windows and macOS checkouts match
+* text=auto eol=lf
+
+# Binary assets
+*.blend binary
+*.glb binary
+*.png binary
+*.jpg binary
+*.wav binary
+*.ogg binary

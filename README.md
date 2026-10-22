@@ -145,9 +145,34 @@ You can also open Godot, click **Import**, choose `project.godot`, and click **I
 
 ### Windows
 
-1. Download **Godot 4.7.2** (standard) from <https://godotengine.org/download/windows/> and unzip it anywhere.
-2. Download **Blender 4.5 LTS** from <https://www.blender.org/download/lts/4-5/> and run the installer.
-3. Clone the repo with Git for Windows, then import `project.godot` in Godot.
+#### 1. Git
+
+Install **Git for Windows** from <https://git-scm.com/download/win>. The default options are fine. It also installs **Git Bash**, a terminal that accepts the same commands as macOS.
+
+#### 2. Godot 4.7.2
+
+1. Download **Godot 4.7.2** (standard, not .NET) from <https://godotengine.org/download/windows/>.
+2. Unzip it to a permanent folder, for example `C:\Godot\`. You get `Godot_v4.7.2-stable_win64.exe` (the editor) and `Godot_v4.7.2-stable_win64_console.exe` (the same program, but it also shows a console window with log output).
+3. **Optional: add a `godot` command.** Rename `Godot_v4.7.2-stable_win64_console.exe` to `godot.exe`. Then add `C:\Godot` to your PATH: open **Start → "Edit environment variables for your account" → Path → Edit → New**, enter `C:\Godot`, and click OK. Open a new terminal and run `godot --version`.
+
+#### 3. Blender 4.5 LTS
+
+Download **Blender 4.5 LTS** for Windows from <https://www.blender.org/download/lts/4-5/> and run the installer. Use 4.5 LTS rather than 5.x so `.blend` files stay compatible with the Mac.
+
+#### 4. Get the project
+
+In **Git Bash**, **PowerShell** or **Command Prompt**:
+
+```bash
+cd %USERPROFILE%\Documents          # PowerShell / Git Bash: cd ~/Documents
+git clone https://github.com/Manlikenonso1k/Gta-ajah.git gta-portharcourt
+cd gta-portharcourt
+godot --headless --path . --import  # first import (or use the Godot UI below)
+```
+
+If you didn't set up the `godot` command, open Godot, click **Import**, choose `gta-portharcourt\project.godot`, and click **Import & Edit**.
+
+> **Line endings:** `.gitattributes` makes git keep files with LF line endings on every system, so files edited on Windows and macOS don't show as entirely changed. Don't turn this off.
 
 ### Linux
 
@@ -159,13 +184,18 @@ You can also open Godot, click **Import**, choose `project.godot`, and click **I
 
 ## Running the game
 
-| How | Command or step |
+First go to the project folder (`cd ~/Documents/gta-portharcourt`, or on Windows `cd %USERPROFILE%\Documents\gta-portharcourt`). Then:
+
+| What | Command or step |
 |---|---|
-| From the terminal | `godot --path ~/Documents/gta-portharcourt` |
-| From the Godot editor | Open the project and press **F5** (or the ▶ button) |
-| Open the editor from the terminal | `godot --path ~/Documents/gta-portharcourt -e` |
+| Play the game | `godot --path .` |
+| Open the editor | `godot --path . -e` |
+| Play from inside the editor | Press **F5** (or the ▶ button at the top right) |
+| No `godot` command? | Open Godot, pick **GTA Port Harcourt** in the Project Manager, and click **Edit** (or **Run**) |
 
 The first launch can take longer while Godot compiles its shaders.
+
+**Renderer:** the project uses Godot's **Compatibility** (OpenGL) renderer so it runs on older Intel Macs. It works on Windows and Linux too. If Godot itself crashes before the Project Manager appears (common on older Intel Macs), start it with `godot --rendering-driver opengl3`.
 
 ---
 
