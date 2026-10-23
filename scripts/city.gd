@@ -9,6 +9,17 @@ const ROAD := 12.0
 const GRID := 5
 const PITCH := BLOCK + ROAD
 const HALF := GRID / 2.0 * PITCH + ROAD / 2.0
+## Traffic drives on the right. Each 12 m road holds two 3.6 m lanes (centres
+## LANE_OFFSET from the road centre line) plus a 2.4 m kerbside parking strip
+## on the east side of the inner north-south roads.
+const LANE_OFFSET := 1.8
+const LANE_WIDTH := 3.6
+const PARK_OFFSET := ROAD / 2.0 - 1.2
+## The pavement is the 3 m band between the block edge and the buildings
+## (buildings reach at most 17.05 m from a block centre). Pedestrians walk on
+## the line PAVEMENT_INSET inside the block edge.
+const PAVEMENT_WIDTH := 2.9
+const PAVEMENT_INSET := 1.5
 
 const BUILDING_COLORS := [
 	Color(0.92, 0.88, 0.78), Color(0.78, 0.45, 0.32), Color(0.65, 0.75, 0.82),
@@ -86,9 +97,56 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 			slots[j] = swap
 		for n in 3:
 			var z := block_center(0, slots[n]).z + rng.randf_range(-8, 8)
-			var pos := Vector3(road_line(k) + ROAD / 2 - 1.6, 0.6, z)
-			spawns["parking"].append(Transform3D(Basis(Vector3.UP, PI if n == 0 else 0.0), pos))
+			# Against the east kerb, facing -Z like the southbound traffic beside it
+			var pos := Vector3(road_line(k) + PARK_OFFSET, 0.6, z)
+			spawns["parking"].append(Transform3D(Basis(Vector3.UP, PI), pos))
+	_zebra_crossings(city)
 	return spawns
+
+
+## True when `p` is on a city block (pavement or building lot), with `margin`
+## metres added around each block. Roads are everything else.
+static func on_block(p: Vector3, margin := 0.0) -> bool:
+	var limit := BLOCK / 2.0 + margin
+	for axis_value: float in [p.x, p.z]:
+		var cell := roundf(axis_value / PITCH + (GRID - 1) / 2.0)
+		if cell < 0 or cell > GRID - 1:
+			return false
+		if absf(axis_value - (cell - (GRID - 1) / 2.0) * PITCH) > limit:
+			return false
+	return true
+
+
+## Zebra stripes for every pavement crossing (one MultiMesh, one draw call).
+static func _zebra_crossings(city: Node3D) -> void:
+	var PavementGraph: GDScript = load("res://scripts/pavement_graph.gd")
+	var crossings: Array = PavementGraph.shared().crossing_segments()
+	var stripe := BoxMesh.new()
+	stripe.size = Vector3(2.4, 0.02, 0.5)
+	var transforms: Array[Transform3D] = []
+	for segment: Array in crossings:
+		var a: Vector3 = segment[0]
+		var b: Vector3 = segment[1]
+		var direction := (b - a).normalized()
+		var stripe_basis := Basis(Vector3.UP, atan2(direction.x, direction.z))
+		var length := a.distance_to(b)
+		var d := 0.6
+		while d < length - 0.4:
+			var p := a + direction * d
+			if not on_block(p, 0.1):
+				transforms.append(Transform3D(stripe_basis, Vector3(p.x, 0.025, p.z)))
+			d += 1.0
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = stripe
+	multimesh.instance_count = transforms.size()
+	for i in transforms.size():
+		multimesh.set_instance_transform(i, transforms[i])
+	var instance := MultiMeshInstance3D.new()
+	instance.name = "ZebraCrossings"
+	instance.multimesh = multimesh
+	instance.material_override = Ragdoll.material(Color(0.92, 0.92, 0.88))
+	city.add_child(instance)
 
 
 static func set_chunk_active(chunk: Node3D, active: bool) -> void:

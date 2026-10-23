@@ -4,8 +4,8 @@ Maintained by the lead. Teammates report status changes to the lead (and finishe
 
 | ID | Owner | Task | Needs | Status |
 |---|---|---|---|---|
-| R1 | ragdoll | Standard skeleton: same bone names on every character; documented; `tests/skeleton_test.gd` | — | ⏳ |
-| R2 | ragdoll | Message everyone the standard bone names and the ragdoll start function signature | R1 | ⬜ |
+| R1 | ragdoll | Standard skeleton: same bone names on every character; documented; `tests/skeleton_test.gd` | — | ✅ |
+| R2 | ragdoll | Message everyone the standard bone names and the ragdoll start function signature | R1 | ✅ |
 | R3 | ragdoll | 16-part ragdoll sized per character, joint limits, no self-collision | R1 | ⬜ |
 | R4 | ragdoll | Walk → ragdoll switch at current pose; car impact by direction/speed/mass; SkeletonModifier3D; no stick figure | R3 | ⬜ |
 | R5 | ragdoll | After the fall: stay down, sleep, remove after 20 s off-screen; player blend-back hook | R4 | ⬜ |

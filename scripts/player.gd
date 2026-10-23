@@ -278,7 +278,7 @@ func _reach_for_door() -> void:
 	await tween.finished
 
 
-func hit_by_vehicle(vehicle_velocity: Vector3) -> void:
+func hit_by_vehicle(vehicle_velocity: Vector3, _impact_point := Vector3.INF, _vehicle_mass := 1200.0) -> void:
 	go_ragdoll(vehicle_velocity * 0.8 + Vector3.UP * 3.0)
 
 

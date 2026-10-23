@@ -28,9 +28,13 @@ const MODELS := {
 	"coach": {"length": 12.0, "yaw": 0, "wheels": [3.835, -2.645, 0.537, 0.537], "mass": 13000, "width": 1.0, "handling": {"accel": 1.35, "top_speed": 31.0, "brake": 17.0, "max_steer": 0.27, "steer_response": 0.7, "suspension": 27.0, "compression": 1.15, "relaxation": 1.75, "grip": 2.4, "roll_influence": 0.02, "gears": [1.0, 0.88, 0.76, 0.66, 0.57], "ratios": [1.0, 0.82, 0.68, 0.57, 0.48], "shift_rpm": 3200.0, "redline": 3400.0}},
 }
 const DIR := "res://assets/models/cars/real/"
+## Per-model measurements shared with blender/make_mobile_cars.py. The "cabin"
+## block (seat and steering wheel) is read from here; see cabin().
+const CONFIG_PATH := "res://assets/models/cars/vehicles.json"
 const MOBILE_DIR := "res://assets/models/cars/mobile/"
 
 static var _cache := {}
+static var _config := {}
 
 
 ## Returns {"body": [[Mesh, Transform3D]], "wheels": [{"center", "radius",
@@ -114,6 +118,20 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 	for i in 4:
 		hubs.append(Vector3(centers[i].x * (outer[i] - tyre_width / 2), radius, centers[i].z))
 
+	# Steering wheel: a thin disc around the measured rim (see cabin()), or every
+	# triangle of a named mesh when the model has one.
+	var cab := cabin(key)
+	var sw_center: Vector3 = cab.get("wheel_center", Vector3.ZERO)
+	# Right-hand-drive models: cut the wheel where it is modelled and mount it
+	# at wheel_center on the game's driver (+X) side.
+	var sw_cut_center: Vector3 = cab.get("wheel_cut_center", sw_center)
+	var sw_axis := steering_axis(cab) if not cab.is_empty() else Vector3.BACK
+	var sw_reach: float = float(cab.get("wheel_radius", 0.0)) * 1.12 + 0.03
+	var sw_depth: float = float(cab.get("wheel_depth", 0.07))
+	var sw_node: String = str(cab.get("wheel_node", ""))
+	var sw_cut: bool = str(cab.get("wheel_source", "")) == "cut"
+	var sw_parts := []
+
 	# Pass 2: classify by triangle centre. Requiring all three vertices to fit
 	# the cylinder clipped broad, low-poly tread faces and left rear tyres partial.
 	var body := []
@@ -128,11 +146,20 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 			if tags[vi] >= 0 and absf(pts[vi].x) < outer[tags[vi]] - tyre_width:
 				tags[vi] = -1
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(pts.size()))
-		var groups := [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
+		var groups := [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
+		var whole_mesh_is_steering := sw_cut and not sw_node.is_empty() and _has_named_ancestor(m, model, sw_node.to_lower())
 		for t in range(0, indices.size() - 2, 3):
 			var a := indices[t]
 			var b := indices[t + 1]
 			var c3 := indices[t + 2]
+			if sw_cut and (whole_mesh_is_steering or (sw_node.is_empty()
+					and _in_disc(pts[a], sw_cut_center, sw_axis, sw_reach, sw_depth)
+					and _in_disc(pts[b], sw_cut_center, sw_axis, sw_reach, sw_depth)
+					and _in_disc(pts[c3], sw_cut_center, sw_axis, sw_reach, sw_depth))):
+				var steering_group: PackedInt32Array = groups[5]
+				steering_group.append_array(PackedInt32Array([a, b, c3]))
+				groups[5] = steering_group
+				continue
 			var centroid := (pts[a] + pts[b] + pts[c3]) / 3.0
 			var g := _wheel_at(centroid, centers, reach)
 			# The centroid alone can assign large fender/body triangles to a
@@ -156,7 +183,7 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 			group.push_back(c3)
 			groups[g] = group
 		var material := _material(m, entry[1])
-		for g in 5:
+		for g in 6:
 			if groups[g].is_empty():
 				continue
 			# One VW T3 body-painted triangle falls inside the front wheel envelope
@@ -165,7 +192,9 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 			if key == "vw_t3" and g < 4 and material != null and material.resource_name == "Material_body":
 				continue
 			var mesh := _sub_mesh(arrays, groups[g], material)
-			if g == 4:
+			if g == 5:
+				sw_parts.append([mesh, Transform3D(Basis.IDENTITY, -sw_cut_center) * xf])
+			elif g == 4:
 				body.append([mesh, xf])
 			else:
 				var wheel_transform := Transform3D(Basis.IDENTITY, -hubs[g]) * xf
@@ -179,8 +208,86 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 		wheels.append({"center": hubs[i], "radius": radius, "front": i < 2, "parts": wheel_parts[i]})
 	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"]), "handling": cfg.get("handling", {}),
 		"source_path": model_path, "source_transform": to_car}
+	if not cab.is_empty():
+		if str(cab.get("wheel_source", "")) == "added":
+			sw_parts = [[_low_poly_steering_wheel(cab), Transform3D.IDENTITY]]
+		result["driver_seat"] = cab["seat"]
+		result["steering_wheel"] = {"center": sw_center, "axis": sw_axis, "radius": float(cab["wheel_radius"]),
+			"max_turn": deg_to_rad(float(cab.get("wheel_turn_deg", 240.0))), "parts": sw_parts}
 	_cache[model_path] = result
 	return result
+
+
+## Seat and steering-wheel measurements for `key` from vehicles.json "cabin",
+## with arrays turned into Vector3. Empty if the model has none. Car-local
+## metres, the same space as build(): +Z forward, +X the driver's (door) side,
+## y = 0 where the tyres touch the road.
+static func cabin(key: String) -> Dictionary:
+	if _config.is_empty():
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CONFIG_PATH))
+		_config = parsed if parsed is Dictionary else {"_invalid": true}
+	var entry: Dictionary = _config.get(key, {})
+	var raw: Dictionary = entry.get("cabin", {})
+	var out := raw.duplicate()
+	for field in ["seat", "wheel_center", "wheel_cut_center"]:
+		if raw.has(field):
+			var v: Array = raw[field]
+			out[field] = Vector3(v[0], v[1], v[2])
+	return out
+
+
+## Unit rotation axis of the steering wheel, pointing from the rim towards the
+## driver. wheel_tilt is the rim plane's angle from vertical: 0 = upright rim
+## (horizontal column), 90 = flat rim (vertical column).
+static func steering_axis(cab: Dictionary) -> Vector3:
+	var tilt := deg_to_rad(float(cab.get("wheel_tilt", 25.0)))
+	return Vector3(0.0, sin(tilt), -cos(tilt))
+
+
+static func _in_disc(p: Vector3, center: Vector3, axis: Vector3, reach: float, depth: float) -> bool:
+	var d := p - center
+	var along := d.dot(axis)
+	return absf(along) <= depth and (d - axis * along).length() <= reach
+
+
+## Fallback rim + three spokes, centred on the origin, facing `axis`.
+static func _low_poly_steering_wheel(cab: Dictionary) -> ArrayMesh:
+	var axis := steering_axis(cab)
+	var u := Vector3.RIGHT
+	var w := axis.cross(u)
+	var r: float = cab["wheel_radius"]
+	var tube := maxf(0.014, r * 0.08)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ring := 24
+	var sides := 6
+	for i in ring:
+		for j in sides:
+			var quad := []
+			for k in [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]:
+				var a: float = TAU * k[0] / ring
+				var b: float = TAU * k[1] / sides
+				var radial := u * cos(a) + w * sin(a)
+				quad.append(radial * (r + tube * cos(b)) + axis * tube * sin(b))
+			for idx in [0, 1, 2, 0, 2, 3]:
+				st.add_vertex(quad[idx])
+	for angle: float in [PI * 0.5, PI * 1.17, PI * 1.83]:
+		var dir := u * cos(angle) + w * sin(angle)
+		var side := dir.cross(axis).normalized() * tube * 0.8
+		var p0 := axis * 0.02
+		var p1 := dir * r
+		for tri in [[p0 - side, p1 - side, p1 + side], [p0 - side, p1 + side, p0 + side]]:
+			for v in tri:
+				st.add_vertex(v)
+			for v in [tri[0], tri[2], tri[1]]:
+				st.add_vertex(v)
+	st.generate_normals()
+	var mesh := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.06, 0.06, 0.065)
+	mat.roughness = 0.7
+	mesh.surface_set_material(0, mat)
+	return mesh
 
 
 ## Index of the wheel whose cylinder (axle along X) contains `p`, or -1.

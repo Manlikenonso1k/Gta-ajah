@@ -59,7 +59,7 @@ Specs: `prompt-1-realistic-ragdoll.md`, `prompt-2-natural-animation.md`, `prompt
 
 | Phase | Teammate | Work | Status |
 |---|---|---|---|
-| 1 | `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll | ⏳ Started |
+| 1 | `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll | ⏳ Step 1 (standard skeleton) done, names sent; ragdoll in progress |
 | 1 | `animator` | Task 2: find/licence/download clips now; retarget after the bone names arrive | ⏳ Started |
 | 1 | `traffic` | Task 3: road graph, lanes, AI driving, pavements and crossings | ⏳ Started |
 | 1 | `vehicles` | Task 4 steps 1–2: player model ("Young PH hustler": Black African man, ~25, ~1.80 m, athletic, dark skin, short black fade, casual shirt, jeans, trainers), seat and steering-wheel measurements, steering wheels cut out | ⏳ Started (step 2 first) |
@@ -83,8 +83,8 @@ Notes on shared code: the car-hit call in `car.gd` (owner `traffic`) and `hit_by
 
 Agreed interfaces are recorded here by the lead as teammates settle them.
 
-- **Standard bone names (ragdoll → everyone):** _pending_
-- **Ragdoll start function (ragdoll → everyone):** _pending_
+- **Standard bone names (ragdoll → everyone):** Godot's `SkeletonProfileHumanoid` names, applied to all 23 characters by `BoneMap` import retargeting in each `.glb.import`; the skeleton node is named `GeneralSkeleton`. Bones: `Root`, `Hips`, `Spine`, `Chest`, `UpperChest`, `Neck`, `Head`, `LeftShoulder`/`RightShoulder`, `LeftUpperArm`, `LeftLowerArm`, `LeftHand` (and Right), `LeftUpperLeg`, `LeftLowerLeg`, `LeftFoot`, `LeftToes` (and Right), plus the profile's finger bones. Checked by `tests/skeleton_test.gd`.
+- **Ragdoll start function (ragdoll → everyone):** `RealisticRagdoll.spawn(model, parent, character_velocity, impact_velocity, impact_point, vehicle_mass)` in `scripts/realistic_ragdoll.gd`. Characters expose `hit_by_vehicle(vehicle_velocity: Vector3, impact_point := Vector3.INF, vehicle_mass := 1200.0)`; `car.gd` calls `body.hit_by_vehicle(linear_velocity, global_position, mass)`.
 - **Locomotion function and states (animator → traffic, vehicles):** `set_locomotion(speed: float, state: String)` on the pedestrian node; states `idle`, `walk`, `run`, `wait_at_kerb` (proposed by traffic, to be confirmed by animator).
 - **Pedestrian navigation hook (traffic → animator):** `scripts/pedestrian_navigation.gd` (owner traffic). `pedestrian.gd` creates `navigation = PedestrianNavigation.new(self)` at the end of `_ready()`; each physics frame it keeps gravity, calls `navigation.physics_step(delta)` (sets `velocity.x/z` and `rotation.y`, calls `set_locomotion` if present), then `move_and_slide()`, then poses the animation from velocity.
 - **Seat and steering-wheel data in `vehicles.json` (vehicles → Phase 2):** _pending_

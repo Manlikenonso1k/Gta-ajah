@@ -14,6 +14,7 @@ const BASE_MASS := 1200.0
 
 const VehicleModel = preload("res://scripts/vehicle_model.gd")
 const Ragdoll = preload("res://scripts/ragdoll.gd")
+const SteeringWheel = preload("res://scripts/steering_wheel.gd")
 
 ## Key into VehicleModel.MODELS
 var model := "corolla"
@@ -24,9 +25,8 @@ var driver: Node = null
 var estimated_rpm := 850.0
 var redline_warning := false
 var ai_enabled := false
-var ai_route: Array[Vector3] = []
-var ai_route_index := 0
-var ai_target_speed := 0.0
+## TrafficDriver (scripts/traffic_driver.gd) for AI traffic; set by traffic.gd
+var ai_driver: RefCounted = null
 var _half_width := 0.9
 var _half_length := 2.2
 var _heft := 1.0
@@ -47,8 +47,8 @@ var _wheels: Array[VehicleWheel3D] = []
 var _wheel_grips: Array[float] = []
 var _traction_blend := 1.0
 var _driven_contact_ratio := 1.0
-var _ai_blocked := false
-var _ai_stuck_time := 0.0
+var _wheelbase := 2.6
+var _steering_wheel: Node3D
 
 
 func _ready() -> void:
@@ -66,6 +66,7 @@ func _ready() -> void:
 
 	for part in data["body"]:
 		add_child(_mesh_instance(part))
+	_steering_wheel = SteeringWheel.attach(self, data)
 	_setup_door_rig(data)
 
 	# Collision box follows the body, raised a little so it doesn't scrape the
@@ -82,6 +83,7 @@ func _ready() -> void:
 	shape.position = Vector3(aabb.get_center().x, (aabb.end.y + bottom) / 2, aabb.get_center().z)
 	add_child(shape)
 
+	var rear_axle := 0.0
 	for w in data["wheels"]:
 		var wheel := VehicleWheel3D.new()
 		# Suspension settles about halfway under the car's weight
@@ -100,8 +102,14 @@ func _ready() -> void:
 		add_child(wheel)
 		_wheels.append(wheel)
 		_wheel_grips.append(wheel.wheel_friction_slip)
+		if w["front"]:
+			_wheelbase = w["center"].z
+		else:
+			rear_axle = w["center"].z
 		for part in w["parts"]:
 			wheel.add_child(_mesh_instance(part))
+
+	_wheelbase = maxf(absf(_wheelbase - rear_axle), 1.5)
 
 	var bumper := Area3D.new()
 	bumper.collision_layer = 0
@@ -227,21 +235,23 @@ func _physics_process(delta: float) -> void:
 	if driver == null and not ai_enabled:
 		engine_force = 0.0
 		steering = 0.0
+		SteeringWheel.update(_steering_wheel, 0.0, 1.0)
 		brake = 5.0 * _heft
 		estimated_rpm = move_toward(estimated_rpm, 850.0, 1800.0 * delta)
 		return
 
 	var speed := linear_velocity.length()
 	var forward_speed := linear_velocity.dot(global_basis.z)
-	var throttle := _ai_throttle() if ai_enabled else Input.get_axis("move_back", "move_forward")
-	var steer_input := _ai_steer() if ai_enabled else Input.get_axis("move_right", "move_left")
+	var throttle := Input.get_axis("move_back", "move_forward")
+	var steer_input := Input.get_axis("move_right", "move_left")
 	if ai_enabled:
-		_ai_stuck_time = _ai_stuck_time + delta if speed < 0.6 else 0.0
-		if _ai_stuck_time > 4.0 and not ai_route.is_empty():
-			ai_route_index = (ai_route_index + 1) % ai_route.size()
-			_ai_stuck_time = 0.0
-	if ai_enabled and not ai_route.is_empty() and global_position.distance_to(ai_route[ai_route_index % ai_route.size()]) < 6.0:
-		ai_route_index = (ai_route_index + 1) % ai_route.size()
+		if ai_driver == null:
+			throttle = 0.0
+			steer_input = 0.0
+		else:
+			ai_driver.control(delta)
+			throttle = ai_driver.out_throttle
+			steer_input = ai_driver.out_steer
 	var contact_count := 0
 	var driven_count := 0
 	for i in _wheels.size():
@@ -259,6 +269,7 @@ func _physics_process(delta: float) -> void:
 	var speed_limit: float = _handling.get("top_speed", TOP_SPEED)
 	var steer_target := steer_input * lerpf(max_steer, max_steer * 0.36, clampf(speed / 30.0, 0, 1)) * _traction_blend
 	steering = move_toward(steering, steer_target, float(_handling.get("steer_response", 2.0)) * delta)
+	SteeringWheel.update(_steering_wheel, steering, max_steer)
 	var gears: Array = _handling.get("gears", [1.0])
 	var ratios: Array = _handling.get("ratios", [1.0])
 	_shift_timer = maxf(0.0, _shift_timer - delta)
@@ -295,9 +306,10 @@ func _physics_process(delta: float) -> void:
 		else:
 			engine_force = throttle * mass * float(_handling.get("accel", ENGINE / BASE_MASS)) * 0.5 * _driven_contact_ratio
 			brake = 0.0
-	if _ai_blocked:
+	if ai_enabled and ai_driver != null and ai_driver.out_brake > 0.0:
+		# AI only: proportional service braking (players' brake stays on/off)
 		engine_force = 0.0
-		brake = float(_handling.get("brake", BRAKE)) * _heft
+		brake = float(_handling.get("brake", BRAKE)) * _heft * ai_driver.out_brake
 
 	if not ai_enabled and Input.is_action_just_pressed("interact"):
 		_exit_pending = true
@@ -316,36 +328,27 @@ func set_driver_weight_loaded(loaded: bool) -> void:
 	_target_driver_weight = 75.0 if loaded else 0.0
 
 
-func _ai_throttle() -> float:
-	_ai_blocked = false
-	if ai_route.is_empty():
-		return 0.0
-	var target: Vector3 = ai_route[ai_route_index % ai_route.size()]
-	var desired := ai_target_speed
-	var space := get_world_3d().direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.8,
-		global_position + global_basis.z * 11.0 + Vector3.UP * 0.8, 1 | 2 | 4)
-	query.exclude = [get_rid()]
-	if not space.intersect_ray(query).is_empty():
-		_ai_blocked = true
-		return 0.0
-	var speed := linear_velocity.length()
-	if speed > desired + 1.0:
-		return -0.25
-	return clampf((desired - speed) * 0.25, 0.0, 1.0)
+func ai_half_length() -> float:
+	return _half_length
 
 
-func _ai_steer() -> float:
-	if ai_route.is_empty():
-		return 0.0
-	var target: Vector3 = ai_route[ai_route_index % ai_route.size()]
-	var local_target := global_basis.inverse() * (target - global_position)
-	return clampf(-atan2(local_target.x, maxf(local_target.z, 0.1)) * 0.85, -1.0, 1.0)
+func ai_wheelbase() -> float:
+	return _wheelbase
+
+
+## Steering angle that steer input 1.0 gives at the current speed (as in _physics_process)
+func ai_max_steer() -> float:
+	var max_steer: float = _handling.get("max_steer", MAX_STEER)
+	return lerpf(max_steer, max_steer * 0.36, clampf(linear_velocity.length() / 30.0, 0, 1)) * _traction_blend
 
 
 func _on_bumper_body_entered(body: Node3D) -> void:
 	if body.has_method("hit_by_vehicle") and linear_velocity.length() > HIT_SPEED:
-		body.hit_by_vehicle(linear_velocity)
+		# Impact point and mass drive the realistic ragdoll; older 1-arg versions still work
+		if body.get_method_argument_count("hit_by_vehicle") >= 3:
+			body.hit_by_vehicle(linear_velocity, global_position, mass)
+		else:
+			body.hit_by_vehicle(linear_velocity)
 
 
 func _mesh_instance(part: Array) -> MeshInstance3D:

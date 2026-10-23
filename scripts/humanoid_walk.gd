@@ -12,14 +12,14 @@ extends RefCounted
 ## Name endings to look for, after lower-casing and removing numeric suffixes
 ## such as "_56" that glTF exporters add
 const BONES := {
-	"thigh_l": ["leftupleg", "upperleg_l", "thigh_l"],
-	"thigh_r": ["rightupleg", "upperleg_r", "thigh_r"],
-	"knee_l": ["leftleg", "lowerleg_l", "calf_l"],
-	"knee_r": ["rightleg", "lowerleg_r", "calf_r"],
-	"arm_l": ["leftarm", "upperarm_l"],
-	"arm_r": ["rightarm", "upperarm_r"],
-	"forearm_l": ["leftforearm", "lowerarm_l"],
-	"forearm_r": ["rightforearm", "lowerarm_r"],
+	"thigh_l": ["leftupperleg", "leftupleg", "upperleg_l", "thigh_l"],
+	"thigh_r": ["rightupperleg", "rightupleg", "upperleg_r", "thigh_r"],
+	"knee_l": ["leftlowerleg", "leftleg", "lowerleg_l", "calf_l"],
+	"knee_r": ["rightlowerleg", "rightleg", "lowerleg_r", "calf_r"],
+	"arm_l": ["leftupperarm", "leftarm", "upperarm_l"],
+	"arm_r": ["rightupperarm", "rightarm", "upperarm_r"],
+	"forearm_l": ["leftlowerarm", "leftforearm", "lowerarm_l"],
+	"forearm_r": ["rightlowerarm", "rightforearm", "lowerarm_r"],
 }
 ## Arms hang this far out from straight down, in radians
 const ARM_SPREAD := 0.16
