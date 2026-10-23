@@ -24,7 +24,7 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | 6 | Android export preset and README "Android build" section | ✅ Configured; APK export needs local Android SDK/JDK/templates |
 | 7 | Tests: touch test, phone checklist | ✅ Desktop smoke, fake-touch and pause-menu tests pass; phone test remains |
 
-### Current task: vehicle physics, world systems, and performance
+### Completed task: vehicle physics, world systems, and performance
 
 The active follow-up in `prompt.md` adds passenger-weight suspension response, obstacle-aware vehicle entry, traction and RPM feedback, city-block streaming, persistent parking, road traffic and pedestrians. The Danfo tyre artifact was caused by a body-painted `Material_body` face from each wheel envelope being extracted and rotated with the rubber. `vehicle_model.gd` now filters only those four faces for the VW T3; the full/mobile mesh audit verifies no body-painted face remains on its tyres. The prior Accord wheel-centering and Sprinter driver's-door fixes remain in place.
 
@@ -34,6 +34,25 @@ The entry approach uses a collision-shaped A* grid, retains `move_and_slide`, an
 
 Automated results and limitations are recorded under [Testing](#testing). The measured headless CPU baseline was 6.894 ms average frame time / 4.639 ms physics time; the combined result is recorded after the final profile run. This headless measurement does not quantify fullscreen GPU time. A visual Danfo driving pass, full-resolution fullscreen comparison, and Android device run still need a human/device check.
 
+### Current task: pedestrian character library (`prompt.md`)
+
+**Status: real characters are in the game; the stick-figure pedestrians are replaced.** The player character is unchanged, as the prompt requires.
+
+| Part | Status |
+|---|---|
+| Registry with stable IDs, 90/10 split, F4 inspector | ✅ `scripts/pedestrian_registry.gd`. Measured 26 Black African / 4 white of 30 (88% over 1000 picks); least-used model picked first |
+| 18 Black African characters | ✅ 16 generated with MPFB 2 (`blender/make_pedestrians.py`, CC0) + Carla (Renderpeople) + one Sketchfab model, both CC BY |
+| 5 white characters | ✅ Renderpeople free samples from Sketchfab (CC BY): Eric, Claudia, Nathan, Sophia, Manuel |
+| Walking | ✅ `scripts/humanoid_walk.gd`: procedural walk on any humanoid skeleton (no per-model clips) |
+| Size and load time | ✅ 23 MB + 4.6 MB; textures embedded as Basis Universal; downloaded models slimmed by `blender/slim_characters.py` |
+| Tests | ✅ `tests/pedestrian_models_test.gd` (all 23 load, walk, correct height, feet on ground, split); smoke, touch, phone menu, world systems and persistence tests still pass |
+| Performance (2013 Intel Iris, High) | 31.7 fps with pedestrians vs 37.0 hidden (16 within 120 m). Low preset: 60 fps (vsync cap). Phone not yet tested |
+| Ragdoll when hit | ⚠️ Still the procedural stick ragdoll (skin tone matched). A ragdoll on each model's skeleton is still to do |
+| Outfit variety | ⚠️ MakeHuman's free clothing is limited: the blue logo T-shirt and the striped shirt each appear twice. More outfits need more asset packs or bought models |
+| Next ideas | Ragdoll on the real skeleton; Mixamo idle/walk clips; more outfits (Nigerian prints, kaftans) via new MakeHuman clothes or bought models |
+
+**Generating characters needs** Blender 4.5 with the MPFB 2 extension and the MakeHuman CC0 asset packs installed. On the dev Mac these are already set up; on a new machine see [Pedestrian characters](#pedestrian-characters). See also [the pedestrian catalogue](docs/PEDESTRIAN_CATALOG.md).
+
 ### Where things are (quick map)
 
 - `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the world, spawns the cars and characters, and creates the HUD and phone pause menu.
@@ -42,6 +61,10 @@ Automated results and limitations are recorded under [Testing](#testing). The me
 - `scripts/vehicle_hud.gd`: data-driven bottom nameplate, speedometer and tachometer styles for all 10 models.
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
 - Tests: `tests/smoke_test.gd` (entry, steering, driving, collision and exit), `tests/vehicle_contact_test.gd`, `tests/vehicle_persistence_test.gd`, `tests/world_systems_test.gd`, `tests/performance_profile.gd`, plus touch, phone, tire, rig and visual checks.
+
+### Pedestrian character workflow
+
+`scripts/pedestrian_registry.gd` lists every pedestrian with a stable ID, model path, appearance category, outfit, tags, scale, source and licence. Downloaded models are in its `CHARACTERS` list; generated ones come from `assets/characters/pedestrians/generated_roster.json`. `BLACK_AFRICAN_WEIGHT` / `WHITE_WEIGHT` set the population mix. `pedestrian.gd` turns each model to face −Z, hides it beyond 120 m, and walks it with `humanoid_walk.gd`. F4 toggles an inspector for the nearest pedestrian. How to add one: [the catalogue](docs/PEDESTRIAN_CATALOG.md) and [Pedestrian characters](#pedestrian-characters).
 
 ### Decisions and gotchas so far
 
@@ -79,7 +102,7 @@ Automated results and limitations are recorded under [Testing](#testing). The me
 - **City:** a generated 5×5 grid of city blocks with roads and yellow centre lines. Buildings come in cream, terracotta, pale blue and ochre, with dark window bands on each floor. There are palm trees, red laterite earth beyond the city, and a hazy tropical sky.
 - **Third-person player:** walks, runs and jumps relative to the camera, with simple arm and leg swing animation.
 - **Vehicles:** 13 drivable vehicles across 10 realistic models from Sketchfab: Toyota Corolla, Camry and Hiace, Mercedes G-Class and Sprinter, BMW E30, Honda Accord, a VW T3 danfo, a town bus and a coach. Each has suspension, spinning and steering wheels, handling scaled to its weight, steering that gets less sharp at speed, brakes and a handbrake. Press E to get in or out.
-- **Pedestrians and traffic:** people wander within sidewalk bounds, pause, avoid obstacles and step away from nearby traffic. AI cars follow rectangular routes on the city roads; distant traffic advances on a low-frequency lightweight update.
+- **Pedestrians and traffic:** 23 realistic, rigged pedestrian models (about 90% Black African, 10% white; office workers, students, traders, elders and more) with a procedural walk. People wander within sidewalk bounds, pause, avoid obstacles and step away from nearby traffic. The pedestrian registry carries stable IDs and model metadata; F4 shows the nearest pedestrian's ID, model, category, outfit, animation and runtime instance ID. AI cars follow rectangular routes on the city roads; distant traffic advances on a low-frequency lightweight update.
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
 - **Display:** vehicle names in the bottom-left and a responsive speedometer/tachometer cluster while driving. Each model has its own name treatment, accent, gauge scale, tick layout and redline. The phone pause screen includes all control hints.
@@ -284,16 +307,21 @@ gta-portharcourt/
 │   ├── touch_controls.gd  # Mobile joystick, look drag and action buttons
 │   ├── phone_menu.gd      # Pause phone continues to receive input while paused
 │   └── quality.gd        # Low / Medium / High graphics presets
-│   ├── pedestrian.gd      # Wandering pedestrian
+│   ├── pedestrian.gd      # Wandering pedestrian (imported model or procedural fallback)
+│   ├── pedestrian_registry.gd # Pedestrian catalogue: IDs, models, 90/10 split
+│   ├── humanoid_walk.gd   # Procedural walk for any humanoid skeleton
 │   ├── ragdoll.gd         # Shared humanoid body: visual, walk animation, physics ragdoll
 │   └── camera_rig.gd      # Third-person orbit camera with spring arm
 ├── assets/
+│   ├── characters/pedestrians/ # Pedestrian models (black_african/, white/), roster and credits
 │   └── models/            # Blender exports (.glb) go here
 │       └── cars/
 │           ├── real/      # Full-detail Sketchfab vehicles (CC BY), see CREDITS.md
 │           └── mobile/    # Reduced mobile copies generated by Blender
 ├── blender/
-│   └── make_mobile_cars.py
+│   ├── make_mobile_cars.py
+│   ├── make_pedestrians.py   # Generates the MPFB pedestrians
+│   └── slim_characters.py    # Slims downloaded character models
 ├── tests/
 │   ├── smoke_test.gd      # Automated gameplay test that runs without a window
 │   ├── touch_controls_test.gd # Fake screen touches check action press/release
@@ -301,7 +329,8 @@ gta-portharcourt/
 │   ├── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
 │   ├── view_vehicle_hud.gd # Captures four example instrument clusters
 │   ├── view_driver.gd     # Captures the driver; pass `sprinter` to view its doors
-│   └── vehicle_tires_test.gd # Audits all real and mobile tire meshes
+│   ├── vehicle_tires_test.gd # Audits all real and mobile tire meshes
+│   └── pedestrian_models_test.gd # Every pedestrian loads, walks, right height; 90/10 split
 └── README.md
 ```
 
@@ -409,6 +438,25 @@ Scripts in `blender/` should save their output to `assets/models/`. Keep Blender
 - Textures no larger than 2K
 - Lower-detail versions of models for objects far from the camera
 
+### Pedestrian characters
+
+Pedestrians come from two places (full list: [docs/PEDESTRIAN_CATALOG.md](docs/PEDESTRIAN_CATALOG.md)):
+
+- **Generated:** `blender/make_pedestrians.py` builds 16 Black African characters with **MPFB 2** (MakeHuman for Blender): low-poly body, African skin textures, hair, everyday clothes and shoes, and a Mixamo-compatible skeleton. Each `ROSTER` entry sets gender, age, build, height, skin, hair, outfit and optional colour tints. Output: `assets/characters/pedestrians/black_african/PED_BA_*.glb` (1–1.7 MB each, 1024 px WebP textures) and `generated_roster.json`.
+- **Downloaded:** free CC BY models from Sketchfab (Renderpeople samples and one other), slimmed with `blender/slim_characters.py`.
+
+**One-time setup for generating** (already done on the dev Mac; needs Blender 4.5 LTS with working glTF, see [Troubleshooting](#troubleshooting) for macOS 12):
+
+1. Install MPFB 2 from Blender's extension site, either in Blender (Edit → Preferences → Get Extensions → search "MPFB") or from the terminal with the zip from <https://extensions.blender.org/add-ons/mpfb/>: `blender -b --command extension install-file -r user_default -e add-on-mpfb-v2.0.18.zip`.
+2. Download the MakeHuman asset packs from <https://static.makehumancommunity.org/assets/assetpacks.html> (all CC0 except suits03, which is CC BY): `makehuman_system_assets`, `skins01`–`skins03`, `suits02`, `suits03`, `system_clothes_materials01`, `system_hair_materials01`.
+3. Unzip each and copy its folders (`skins`, `hair`, `clothes`, `eyes`, `eyebrows`, `eyelashes`, `proxymeshes`, `teeth`, `tongue`) into MPFB's user data folder. On macOS that's `~/Library/Application Support/Blender/4.5/extensions/.user/user_default/mpfb/data/`. MPFB's own "Load pack from zip" button in Blender does the same.
+
+**Generate:** `blender -b --python blender/make_pedestrians.py` (all 16, about 2 minutes) or `blender -b --python blender/make_pedestrians.py -- PED_BA_F03` for one. Then run `godot --headless --path . --import` and `tests/pedestrian_models_test.gd`.
+
+**Import settings:** each character's `.glb.import` uses `gltf/embedded_image_handling=2` (Basis Universal): textures stay inside the imported scene, GPU-compressed on desktop and Android, with no extracted `.png` copies. With Godot's default (extract), the pedestrian folders grew to 272 MB; now they're about 28 MB.
+
+**Walking:** `scripts/humanoid_walk.gd` drives the thigh, knee, upper-arm and forearm bones procedurally, so models from any source walk without animation clips. It recognises MPFB/Mixamo (`mixamorig:LeftUpLeg`), Renderpeople (`upperleg_l`) and Unreal-style (`thigh_l`) bone names.
+
 ---
 
 ## Testing
@@ -425,6 +473,7 @@ godot --headless --path . --script tests/vehicle_contact_test.gd
 godot --headless --path . --script tests/vehicle_persistence_test.gd
 godot --headless --path . --script tests/world_systems_test.gd
 godot --headless --path . --script tests/performance_profile.gd
+godot --headless --path . --script tests/pedestrian_models_test.gd
 ```
 
 The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It also verifies that the Accord's corrected front wheels are centered. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. The rig check verifies that only the Sprinter driver's door track is active. For a visual check with wheels highlighted in magenta:
@@ -587,7 +636,7 @@ The render resolution only scales the 3D scene (bilinear upscaling, which the Co
 | Problem | Fix |
 |---|---|
 | `godot: command not found` | Open a new terminal, or run `source ~/.zshrc`. Check that `~/.local/bin/godot` exists. |
-| Blender can't import or export glTF on macOS 12: `numpy` error mentioning `_cblas_caxpy$NEWLAPACK` | Blender 4.5's bundled numpy needs macOS 13.3 or newer. This should fix it (not yet tried on the development Mac): install a numpy that works on macOS 12 into Blender's Python: `/Applications/Blender.app/Contents/Resources/4.5/python/bin/python3.11 -m pip install --upgrade --force-reinstall "numpy==1.26.4" --only-binary=:all: --target /Applications/Blender.app/Contents/Resources/4.5/python/lib/python3.11/site-packages`. Windows and newer Macs aren't affected. |
+| Blender can't import or export glTF on macOS 12: `numpy` error mentioning `_cblas_caxpy$NEWLAPACK` | Blender 4.5's bundled numpy needs macOS 13.3 or newer. **Fixed on the dev Mac** by replacing it with the macOS 10.9+ build of numpy 1.26.4 (original backed up in `~/blender-numpy-backup`). On another Mac: `P=/Applications/Blender.app/Contents/Resources/4.5/python; $P/bin/python3.11 -m pip download numpy==1.26.4 --only-binary=:all: --no-deps --platform macosx_10_9_x86_64 --python-version 3.11 -d /tmp/np`, then `$P/bin/python3.11 -m pip install --no-deps --force-reinstall --target /tmp/np_new /tmp/np/numpy-*.whl` and copy `/tmp/np_new/numpy` over `$P/lib/python3.11/site-packages/numpy`. Windows and newer Macs aren't affected. |
 | Blender prints Python errors about `sys.prefix` | You're starting it through a symlink. Use the launcher script from [Installation](#installation). |
 | Blender 5.x won't open on an Intel Mac | Expected: use Blender 4.5 LTS. |
 | The project opens but physics settings look wrong | You're on Godot older than 4.4. Install 4.7.2. |
@@ -617,6 +666,7 @@ The render resolution only scales the 3D scene (bilinear upscaling, which the Co
 ## Credits
 
 - Vehicle models: 10 models from Sketchfab by their authors, CC BY 4.0. See [assets/models/cars/real/CREDITS.md](assets/models/cars/real/CREDITS.md) for each author and source link.
+- Pedestrians: Renderpeople (Carla, Eric, Claudia, Nathan, Sophia, Manuel) and Maggadog, via Sketchfab, CC BY 4.0; see [CREDITS_SKETCHFAB.md](assets/characters/pedestrians/CREDITS_SKETCHFAB.md). Generated pedestrians use [MPFB 2](https://static.makehumancommunity.org/mpfb.html) and MakeHuman community assets (CC0).
 
 ---
 

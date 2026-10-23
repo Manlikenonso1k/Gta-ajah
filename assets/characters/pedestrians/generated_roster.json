@@ -1,0 +1,222 @@
+[
+ {
+  "id": "PED_BA_M01",
+  "display_name": "Student, yellow shirt",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M01.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit01+shoes02",
+  "tags": [
+   "student",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M02",
+  "display_name": "Commuter, afro",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M02.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit02+shoes01",
+  "tags": [
+   "commuter",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M03",
+  "display_name": "Office worker, suit",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M03.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_elegantsuit01+shoes03",
+  "tags": [
+   "office",
+   "business_casual"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M04",
+  "display_name": "Trader, work clothes",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M04.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_worksuit01+shoes04",
+  "tags": [
+   "market",
+   "worker"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M05",
+  "display_name": "Young man, striped shirt",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M05.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit03+shoes05",
+  "tags": [
+   "casual",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M06",
+  "display_name": "Older man",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M06.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit06+shoes06",
+  "tags": [
+   "elder"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M07",
+  "display_name": "Tall man, white shirt",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M07.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit01+shoes03",
+  "tags": [
+   "casual",
+   "business_casual"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M08",
+  "display_name": "Young man, teal shirt",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M08.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit01+shoes02",
+  "tags": [
+   "casual",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_M09",
+  "display_name": "Heavy-set man, casual",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_M09.glb",
+  "appearance_category": "black_african",
+  "gender": "male",
+  "outfit_id": "male_casualsuit01+shoes01",
+  "tags": [
+   "casual",
+   "market"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F01",
+  "display_name": "Student, braids",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F01.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "female_casualsuit01+shoes05",
+  "tags": [
+   "student",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F02",
+  "display_name": "Office worker, ponytail",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F02.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "female_elegantsuit01+shoes03",
+  "tags": [
+   "office",
+   "business_casual"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F03",
+  "display_name": "Market woman",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F03.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "elvs_sporty_tracksuit_hoodie_dress1+shoes04",
+  "tags": [
+   "market"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F04",
+  "display_name": "Young woman, sportswear",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F04.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "female_sportsuit01+shoes02",
+  "tags": [
+   "casual",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F05",
+  "display_name": "Older woman",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F05.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "female_elegantsuit01+shoes06",
+  "tags": [
+   "elder"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F06",
+  "display_name": "Woman, pantsuit",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F06.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "elvs_halter_style_pantsuit1+shoes03",
+  "tags": [
+   "business_casual"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ },
+ {
+  "id": "PED_BA_F07",
+  "display_name": "Young woman, hoodie dress",
+  "model_path": "res://assets/characters/pedestrians/black_african/PED_BA_F07.glb",
+  "appearance_category": "black_african",
+  "gender": "female",
+  "outfit_id": "elvs_sporty_tracksuit_hoodie_dress1+shoes01",
+  "tags": [
+   "casual",
+   "young"
+  ],
+  "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0)",
+  "license": "CC0"
+ }
+]

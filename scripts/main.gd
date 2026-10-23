@@ -7,6 +7,7 @@ const CameraRig = preload("res://scripts/camera_rig.gd")
 const Player = preload("res://scripts/player.gd")
 const Car = preload("res://scripts/car.gd")
 const Pedestrian = preload("res://scripts/pedestrian.gd")
+const PedestrianRegistry = preload("res://scripts/pedestrian_registry.gd")
 const TouchControls = preload("res://scripts/touch_controls.gd")
 const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 
@@ -32,6 +33,8 @@ var _stream_timer := 0.0
 var _save_timer := 0.0
 var _perf_timer := 0.0
 var _perf_label: Label
+var _ped_debug_label: Label
+var _ped_inspection_enabled := false
 
 
 func _ready() -> void:
@@ -66,7 +69,25 @@ func _ready() -> void:
 	var walkers := mini(quality["pedestrians"], points.size())
 	for i in walkers:
 		var ped := Pedestrian.new()
+		var character: Dictionary = PedestrianRegistry.choose(rng)
+		ped.character_id = character.id
+		ped.character_display_name = character.display_name
+		ped.model_path = character.model_path
+		ped.appearance_category = character.appearance_category
+		ped.outfit_id = character.outfit_id
+		ped.character_scale = float(character.get("scale", 1.0))
+		ped.collision_radius = float(character.get("collision_radius", 0.3))
+		ped.collision_height = float(character.get("collision_height", 1.8))
+		if str(character.model_path).begins_with("res://"):
+			var model_resource: Resource = load(character.model_path)
+			if model_resource is PackedScene:
+				ped.model_scene = model_resource
 		ped.colors = Ragdoll.random_colors(rng)
+		# The knocked-down ragdoll is still the procedural body; at least match the skin
+		if character.appearance_category == "black_african":
+			ped.colors["skin"] = Color(0.24, 0.14, 0.09).lerp(Color(0.36, 0.22, 0.14), rng.randf())
+		elif character.appearance_category == "white":
+			ped.colors["skin"] = Color(0.85, 0.68, 0.58)
 		ped.position = points[i * points.size() / walkers]
 		ped.wander_origin = ped.position
 		add_child(ped)
@@ -92,6 +113,8 @@ func _process(delta: float) -> void:
 	if _stream_timer >= 0.5:
 		_stream_timer = 0.0
 		_update_streaming()
+		if _ped_inspection_enabled:
+			_update_ped_debug_label()
 	if _save_timer >= 5.0:
 		_save_timer = 0.0
 		save_vehicle_states()
@@ -275,6 +298,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_perf_label()
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F4:
+		_ped_inspection_enabled = not _ped_inspection_enabled
+		_ped_debug_label.visible = _ped_inspection_enabled
+		_update_ped_debug_label()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and event.alt_pressed and event.keycode == KEY_ENTER:
 		var mode := DisplayServer.window_get_mode()
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if mode == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -351,6 +380,16 @@ func _build_phone_menu(layer: CanvasLayer) -> void:
 	_perf_label.add_theme_constant_override("shadow_offset_x", 1)
 	_perf_label.add_theme_constant_override("shadow_offset_y", 1)
 	layer.add_child(_perf_label)
+	_ped_debug_label = Label.new()
+	_ped_debug_label.visible = false
+	_ped_debug_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_ped_debug_label.position = Vector2(14.0, 14.0)
+	_ped_debug_label.size = Vector2(440.0, 116.0)
+	_ped_debug_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45))
+	_ped_debug_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	_ped_debug_label.add_theme_constant_override("shadow_offset_x", 1)
+	_ped_debug_label.add_theme_constant_override("shadow_offset_y", 1)
+	layer.add_child(_ped_debug_label)
 	var resume := Button.new()
 	resume.text = "RESUME GAME"
 	resume.custom_minimum_size.y = 48
@@ -378,4 +417,27 @@ func _update_perf_label() -> void:
 	var pedestrians := get_tree().get_nodes_in_group("pedestrians").size()
 	_perf_label.text = "FPS %d  |  frame %.1f ms\nphysics %.1f ms\nvehicles %d  people %d\nF3 hides this panel" % [
 		Engine.get_frames_per_second(), 1000.0 / maxf(Engine.get_frames_per_second(), 1), physics_ms, cars, pedestrians
+	]
+
+
+func _update_ped_debug_label() -> void:
+	if not _ped_inspection_enabled or _ped_debug_label == null or _player == null:
+		return
+	var nearest: Node
+	var nearest_distance := INF
+	for pedestrian: Node3D in get_tree().get_nodes_in_group("pedestrians"):
+		var distance := pedestrian.global_position.distance_squared_to(_player.global_position)
+		if distance < nearest_distance:
+			nearest = pedestrian
+			nearest_distance = distance
+	if nearest == null:
+		_ped_debug_label.text = "PEDESTRIAN INSPECTOR  [F4 off]\nNo pedestrians loaded"
+		return
+	var anim_name := "procedural_walk"
+	var animation_player := nearest.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if animation_player != null and not animation_player.current_animation.is_empty():
+		anim_name = animation_player.current_animation
+	_ped_debug_label.text = "PEDESTRIAN INSPECTOR  [F4 off]\n%s  /  %s\nModel: %s\nCategory: %s  |  Outfit: %s\nAnimation: %s  |  Instance: %d" % [
+		nearest.get("character_id"), nearest.get("character_display_name"), nearest.get("model_path"),
+		nearest.get("appearance_category"), nearest.get("outfit_id"), anim_name, nearest.get_instance_id()
 	]

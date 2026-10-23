@@ -2,11 +2,27 @@ extends CharacterBody3D
 ## Wandering pedestrian. Turns into a ragdoll when hit by a car.
 
 const Ragdoll = preload("res://scripts/ragdoll.gd")
+const HumanoidWalk = preload("res://scripts/humanoid_walk.gd")
 
 const SPEED := 1.4
+const VISIBLE_DISTANCE := 120.0
+## Real legs need about 1.8 steps per second at walking speed; the phase
+## below was tuned for the stick figure's shorter stride
+const WALK_CADENCE := 1.8
 
 var colors: Dictionary
 var wander_origin := Vector3.ZERO
+var character_id := "PED_LEGACY_PROC_001"
+var character_display_name := "Legacy Procedural Pedestrian"
+var model_path := "procedural://scripts/ragdoll.gd"
+var appearance_category := "unclassified_procedural"
+var outfit_id := "legacy_colour_variant"
+var model_scene: PackedScene
+var character_scale := 1.0
+var collision_radius := 0.3
+var collision_height := 1.8
+var _model_animation_player: AnimationPlayer
+var _walker: RefCounted
 
 var _direction := Vector3.FORWARD
 var _turn_timer := 0.0
@@ -24,14 +40,33 @@ func _ready() -> void:
 	collision_mask = 1 | 2 | 4
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.3
-	capsule.height = 1.8
+	capsule.radius = collision_radius
+	capsule.height = collision_height
 	shape.shape = capsule
-	shape.position.y = 0.9
+	shape.position.y = collision_height * 0.5
 	add_child(shape)
 	var visual := Node3D.new()
+	visual.name = "CharacterVisual"
 	add_child(visual)
-	_limbs = Ragdoll.build_visual(visual, colors)
+	if model_scene != null:
+		var model := model_scene.instantiate()
+		model.name = "ImportedCharacterModel"
+		model.scale = Vector3.ONE * character_scale
+		# Imported models face +Z (glTF); characters in this game face -Z
+		model.rotation.y = PI
+		visual.add_child(model)
+		for mesh: GeometryInstance3D in model.find_children("*", "GeometryInstance3D", true, false):
+			# Too small to read beyond this, and skinned meshes are costly on phones
+			mesh.visibility_range_end = VISIBLE_DISTANCE
+		_walker = HumanoidWalk.create(model)
+		_model_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if _walker != null and _model_animation_player != null:
+			# The procedural walk drives the skeleton; a clip would fight it
+			_model_animation_player.stop()
+			_model_animation_player = null
+		_set_model_animation("walk")
+	else:
+		_limbs = Ragdoll.build_visual(visual, colors)
 	_phase = randf() * TAU
 	_pick_direction()
 
@@ -57,7 +92,12 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, SPEED * 5.0 * delta)
 		move_and_slide()
 		_phase += delta
-		Ragdoll.animate(_limbs, _phase, 0.0)
+		if not _limbs.is_empty():
+			Ragdoll.animate(_limbs, _phase, 0.0)
+		elif _walker != null:
+			_walker.pose(_phase * WALK_CADENCE, 0.0)
+		else:
+			_set_model_animation("idle")
 		return
 	velocity.x = _direction.x * SPEED
 	velocity.z = _direction.z * SPEED
@@ -65,7 +105,29 @@ func _physics_process(delta: float) -> void:
 	rotation.y = lerp_angle(rotation.y, atan2(-_direction.x, -_direction.z), 6.0 * delta)
 	var actual_speed := Vector2(velocity.x, velocity.z).length()
 	_phase += actual_speed * 2.2 * delta
-	Ragdoll.animate(_limbs, _phase, clampf(actual_speed / SPEED, 0.0, 1.0) * 0.6)
+	if not _limbs.is_empty():
+		Ragdoll.animate(_limbs, _phase, clampf(actual_speed / SPEED, 0.0, 1.0) * 0.6)
+	elif _walker != null:
+		_walker.pose(_phase * WALK_CADENCE, clampf(actual_speed / SPEED, 0.0, 1.0))
+	else:
+		_set_model_animation("walk")
+
+
+func _set_model_animation(wanted: String) -> void:
+	if _model_animation_player == null:
+		return
+	var fallback := ""
+	for animation_name: StringName in _model_animation_player.get_animation_list():
+		var lower := String(animation_name).to_lower()
+		if lower.contains(wanted):
+			if _model_animation_player.current_animation != animation_name:
+				_model_animation_player.play(animation_name)
+			return
+		if fallback.is_empty() and (lower.contains("idle") or lower.contains("walk")):
+			fallback = animation_name
+	if not fallback.is_empty():
+		if _model_animation_player.current_animation != fallback:
+			_model_animation_player.play(fallback)
 
 
 func _avoid_traffic() -> void:
