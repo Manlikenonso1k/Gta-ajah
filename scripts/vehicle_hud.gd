@@ -1,6 +1,6 @@
 extends Control
-## Lightweight, data-driven driving cluster. RPM is a smoothed estimate from
-## speed and throttle because the current car model has no engine/gearbox.
+## Lightweight, data-driven driving cluster. RPM follows the vehicle's
+## simplified automatic transmission model and current gear ratio.
 
 const STYLES := {
 	"corolla": {"name": "TOYOTA COROLLA", "sub": "COMPACT  /  16V", "accent": Color("77d9c5"), "max_speed": 220.0, "rpm_max": 8000.0, "redline": 6500.0, "design": "clean", "size": 23, "font": "Avenir Next", "weight": 500, "italic": false},

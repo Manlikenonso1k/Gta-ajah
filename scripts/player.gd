@@ -20,6 +20,7 @@ var _ragdoll_pelvis: RigidBody3D = null
 var _ragdoll_timer := 0.0
 var _enter_cooldown := 0.0
 var _interaction_busy := false
+var _visual: Node3D
 
 
 func _ready() -> void:
@@ -32,9 +33,9 @@ func _ready() -> void:
 	shape.shape = capsule
 	shape.position.y = 0.9
 	add_child(shape)
-	var visual := Node3D.new()
-	add_child(visual)
-	_limbs = Ragdoll.build_visual(visual, colors)
+	_visual = Node3D.new()
+	add_child(_visual)
+	_limbs = Ragdoll.build_visual(_visual, colors)
 	camera_rig.follow(self, 1.6)
 
 
@@ -86,23 +87,30 @@ func _try_enter_car() -> void:
 	_interaction_busy = true
 	velocity = Vector3.ZERO
 	global_rotation.y = nearest.global_rotation.y + PI / 2.0
+	Ragdoll.animate(_limbs, 0.0, 0.0)
+	var seat_point: Vector3 = nearest.to_global(nearest.driver_seat_point())
+	# Walk an exterior route. move_and_slide keeps world collision active, so
+	# buildings can block the route and the car body cannot be crossed.
+	for waypoint: Vector3 in nearest.exterior_entry_points(global_position):
+		if not await _walk_to(waypoint):
+			print("Entry route blocked at ", global_position, " target ", waypoint)
+			_interaction_busy = false
+			_enter_cooldown = 0.5
+			return
+	await nearest.animate_driver_door(true)
+	# The final short move goes through the open doorway; hide the standing mesh
+	# progressively so the head never passes visibly through the roof.
 	collision_layer = 0
 	collision_mask = 0
-	Ragdoll.animate_driver(_limbs, 0.0)
-	var door_point: Vector3 = nearest.to_global(nearest.driver_door_point())
-	var seat_point: Vector3 = nearest.to_global(nearest.driver_seat_point())
-	var tween := create_tween()
-	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "global_position", door_point, 0.28)
-	await tween.finished
-	await nearest.animate_driver_door(true)
 	var enter_tween := create_tween()
 	enter_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	enter_tween.tween_property(self, "global_position", seat_point, 0.32)
+	enter_tween.parallel().tween_property(_visual, "scale", Vector3(0.15, 0.15, 0.15), 0.32)
 	await enter_tween.finished
 	await nearest.animate_driver_door(false)
 	if not is_instance_valid(nearest):
 		_interaction_busy = false
+		_visual.scale = Vector3.ONE
 		_set_active(true)
 		return
 	global_rotation.y = nearest.global_rotation.y + PI
@@ -119,17 +127,48 @@ func begin_exit_car(vehicle: Node3D, position_: Vector3) -> void:
 	global_position = vehicle.to_global(vehicle.driver_seat_point())
 	global_rotation.y = vehicle.global_rotation.y + PI
 	velocity = Vector3.ZERO
-	_set_active(true)
+	# Keep the character out of rigid-body collision until fully clear of the
+	# vehicle's box collider; restoring it at the seat caused the launch impulse.
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
 	vehicle.finish_driver_exit()
+	_visual.scale = Vector3(0.15, 0.15, 0.15)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_property(self, "global_position", position_, 0.42)
+	tween.parallel().tween_property(_visual, "scale", Vector3.ONE, 0.42)
 	await tween.finished
+	_set_active(true)
 	await vehicle.animate_driver_door(false)
 	car = null
 	_enter_cooldown = 0.4
 	_interaction_busy = false
 	camera_rig.follow(self, 1.6)
+
+
+func _walk_to(target: Vector3) -> bool:
+	var elapsed := 0.0
+	var last_distance := INF
+	var stuck_time := 0.0
+	while is_instance_valid(self) and global_position.distance_to(target) > 0.32 and elapsed < 8.0:
+		var offset := target - global_position
+		offset.y = 0.0
+		var direction := offset.normalized()
+		velocity.x = direction.x * WALK_SPEED
+		velocity.z = direction.z * WALK_SPEED
+		if not is_on_floor():
+			velocity.y += get_gravity().y * get_physics_process_delta_time()
+		move_and_slide()
+		var distance := global_position.distance_to(target)
+		stuck_time = stuck_time + get_physics_process_delta_time() if distance >= last_distance - 0.005 else 0.0
+		if stuck_time > 0.8:
+			velocity = Vector3.ZERO
+			return false
+		last_distance = distance
+		elapsed += get_physics_process_delta_time()
+		await get_tree().physics_frame
+	velocity = Vector3.ZERO
+	return global_position.distance_to(target) <= 0.45
 
 
 func hit_by_vehicle(vehicle_velocity: Vector3) -> void:

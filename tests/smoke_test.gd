@@ -33,8 +33,11 @@ func _run() -> void:
 	player.global_position = car.global_position + Vector3(1.5, 0, 0)
 	await _frames(5)
 	player._try_enter_car()
-	await _frames(45)
+	await _frames(240)
 	print("driving: ", player.car == car)
+	if player.car != car:
+		quit(1)
+		return
 	Input.action_press("move_left")
 	await _frames(20)
 	var left_steer := car.steering
@@ -62,5 +65,22 @@ func _run() -> void:
 	Input.action_press("interact")
 	await _frames(480)
 	Input.action_release("interact")
-	print("safe exit after braking: ", player.car == null and player.visible)
+	var first_exit_speed := car.linear_velocity.length()
+	print("safe exit after braking: ", player.car == null and player.visible, "  vehicle speed: ", snappedf(first_exit_speed, 0.01))
+	if player.car != null or first_exit_speed > 0.5:
+		quit(1)
+		return
+	# Repeat a stationary exit, the case that used to create the overlap impulse.
+	player.global_position = car.global_position + car.global_basis.x * 1.5
+	await _frames(3)
+	player._try_enter_car()
+	await _frames(240)
+	if player.car != car:
+		push_error("Repeated vehicle entry did not complete")
+		quit(1)
+		return
+	Input.action_press("interact")
+	await _frames(180)
+	Input.action_release("interact")
+	print("repeated stationary exit launch check: ", player.car == null and car.linear_velocity.length() < 0.5)
 	quit()

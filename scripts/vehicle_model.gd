@@ -16,16 +16,16 @@ extends RefCounted
 ##   mass:    kg; engine and brakes scale with it
 
 const MODELS := {
-	"corolla": {"length": 4.62, "yaw": 0, "wheels": [1.337, -1.369, 0.815, 0.318], "mass": 1300},
-	"camry": {"length": 4.81, "yaw": 0, "wheels": [1.445, -1.305, 0.325, 0.325], "mass": 1450},
-	"benz_g": {"length": 4.66, "yaw": 0, "wheels": [1.56, -1.271, 0.392, 0.392], "mass": 2400},
-	"bmw_e30": {"length": 4.32, "yaw": 90, "wheels": [1.399, -1.167, 0.292, 0.292], "mass": 1200},
-	"accord": {"length": 4.67, "yaw": 180, "wheels": [1.364, -1.319, 0.315, 0.315], "mass": 1400},
-	"sprinter": {"length": 6.94, "yaw": 0, "wheels": [2.486, -1.214, 0.492, 0.349], "mass": 2600},
-	"hiace": {"length": 4.70, "yaw": 180, "wheels": [1.153, -1.166, 0.285, 0.285], "mass": 1900},
-	"vw_t3": {"length": 4.57, "yaw": 90, "wheels": [1.02, -1.511, 0.321, 0.321], "mass": 1500},
-	"town_bus": {"length": 11.0, "yaw": 270, "wheels": [2.924, -2.152, 0.5, 0.5], "mass": 11000, "width": 1.3},
-	"coach": {"length": 12.0, "yaw": 0, "wheels": [3.835, -2.645, 0.537, 0.537], "mass": 13000, "width": 1.0},
+	"corolla": {"length": 4.62, "yaw": 0, "wheels": [1.337, -1.369, 0.815, 0.318], "mass": 1300, "handling": {"accel": 4.1, "top_speed": 43.0, "brake": 27.0, "max_steer": 0.52, "steer_response": 2.2, "suspension": 42.0, "compression": 1.5, "relaxation": 2.0, "grip": 3.2, "gears": [1.0, 0.92, 0.84, 0.76, 0.68, 0.6], "ratios": [1.0, 0.82, 0.69, 0.59, 0.51, 0.44], "shift_rpm": 4400.0}},
+	"camry": {"length": 4.81, "yaw": 0, "wheels": [1.445, -1.305, 0.325, 0.325], "mass": 1450, "handling": {"accel": 4.0, "top_speed": 44.0, "brake": 27.0, "max_steer": 0.5, "steer_response": 2.0, "suspension": 40.0, "compression": 1.5, "relaxation": 2.0, "grip": 3.2, "gears": [1.0, 0.92, 0.84, 0.76, 0.68, 0.6], "ratios": [1.0, 0.82, 0.69, 0.59, 0.51, 0.44], "shift_rpm": 4400.0}},
+	"benz_g": {"length": 4.66, "yaw": 0, "wheels": [1.56, -1.271, 0.392, 0.392], "mass": 2400, "handling": {"accel": 3.3, "top_speed": 39.0, "brake": 30.0, "max_steer": 0.43, "steer_response": 1.55, "suspension": 48.0, "compression": 1.7, "relaxation": 2.2, "grip": 3.4, "gears": [1.0, 0.87, 0.76, 0.67, 0.59, 0.52, 0.46], "ratios": [1.0, 0.81, 0.68, 0.58, 0.5, 0.44, 0.39], "shift_rpm": 4300.0}},
+	"bmw_e30": {"length": 4.32, "yaw": 90, "wheels": [1.399, -1.167, 0.292, 0.292], "mass": 1200, "handling": {"accel": 5.4, "top_speed": 48.0, "brake": 30.0, "max_steer": 0.58, "steer_response": 2.8, "suspension": 55.0, "compression": 1.7, "relaxation": 2.3, "grip": 3.6, "roll_influence": 0.05, "gears": [1.0, 0.87, 0.76, 0.66, 0.57], "ratios": [1.0, 0.78, 0.66, 0.57, 0.5], "shift_rpm": 5000.0}},
+	"accord": {"length": 4.67, "yaw": 180, "wheels": [1.364, -1.319, 0.315, 0.315], "wheel_offsets": [Vector3(0, 0.011, 0.124), Vector3(0, 0.011, -0.159), Vector3.ZERO, Vector3.ZERO], "mass": 1400, "handling": {"accel": 4.2, "top_speed": 44.0, "brake": 28.0, "max_steer": 0.49, "steer_response": 2.0, "suspension": 42.0, "compression": 1.5, "relaxation": 2.0, "grip": 3.25, "gears": [1.0, 0.91, 0.82, 0.73, 0.64, 0.56], "ratios": [1.0, 0.81, 0.68, 0.58, 0.5, 0.43], "shift_rpm": 4700.0}},
+	"sprinter": {"length": 6.94, "yaw": 0, "wheels": [2.486, -1.214, 0.492, 0.349], "mass": 2600, "handling": {"accel": 2.6, "top_speed": 34.0, "brake": 22.0, "max_steer": 0.38, "steer_response": 1.25, "suspension": 34.0, "compression": 1.3, "relaxation": 1.9, "grip": 2.8, "roll_influence": 0.04, "gears": [1.0, 0.88, 0.76, 0.66, 0.57], "ratios": [1.0, 0.82, 0.68, 0.57, 0.48], "shift_rpm": 3900.0}},
+	"hiace": {"length": 4.70, "yaw": 180, "wheels": [1.153, -1.166, 0.285, 0.285], "mass": 1900, "handling": {"accel": 3.1, "top_speed": 37.0, "brake": 24.0, "max_steer": 0.43, "steer_response": 1.6, "suspension": 38.0, "compression": 1.4, "relaxation": 1.9, "grip": 3.0, "roll_influence": 0.06, "gears": [1.0, 0.88, 0.76, 0.66, 0.57], "ratios": [1.0, 0.82, 0.68, 0.57, 0.48], "shift_rpm": 4200.0}},
+	"vw_t3": {"length": 4.57, "yaw": 90, "wheels": [1.02, -1.511, 0.321, 0.321], "mass": 1500, "handling": {"accel": 3.6, "top_speed": 36.0, "brake": 23.0, "max_steer": 0.46, "steer_response": 1.8, "suspension": 40.0, "compression": 1.4, "relaxation": 1.9, "grip": 3.0, "gears": [1.0, 0.86, 0.73, 0.61], "ratios": [1.0, 0.8, 0.65, 0.52], "shift_rpm": 4400.0}},
+	"town_bus": {"length": 11.0, "yaw": 270, "wheels": [2.924, -2.152, 0.5, 0.5], "mass": 11000, "width": 1.3, "handling": {"accel": 1.6, "top_speed": 29.0, "brake": 18.0, "max_steer": 0.3, "steer_response": 0.8, "suspension": 29.0, "compression": 1.2, "relaxation": 1.8, "grip": 2.5, "roll_influence": 0.02, "gears": [1.0, 0.88, 0.76, 0.66, 0.57], "ratios": [1.0, 0.82, 0.68, 0.57, 0.48], "shift_rpm": 3300.0}},
+	"coach": {"length": 12.0, "yaw": 0, "wheels": [3.835, -2.645, 0.537, 0.537], "mass": 13000, "width": 1.0, "handling": {"accel": 1.35, "top_speed": 31.0, "brake": 17.0, "max_steer": 0.27, "steer_response": 0.7, "suspension": 27.0, "compression": 1.15, "relaxation": 1.75, "grip": 2.4, "roll_influence": 0.02, "gears": [1.0, 0.88, 0.76, 0.66, 0.57], "ratios": [1.0, 0.82, 0.68, 0.57, 0.48], "shift_rpm": 3200.0}},
 }
 const DIR := "res://assets/models/cars/real/"
 const MOBILE_DIR := "res://assets/models/cars/mobile/"
@@ -159,18 +159,25 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 		for g in 5:
 			if groups[g].is_empty():
 				continue
+			# One VW T3 body-painted triangle falls inside the front wheel envelope
+			# in both asset variants. It was rotating with the tyre as a yellow
+			# paint shard; drop only that stray face from the extracted wheel.
+			if key == "vw_t3" and g < 4 and material != null and material.resource_name == "Material_body":
+				continue
 			var mesh := _sub_mesh(arrays, groups[g], material)
 			if g == 4:
 				body.append([mesh, xf])
 			else:
-				wheel_parts[g].append([mesh, Transform3D(Basis.IDENTITY, -hubs[g]) * xf])
+				var wheel_transform := Transform3D(Basis.IDENTITY, -hubs[g]) * xf
+				wheel_transform.origin -= cfg.get("wheel_offsets", [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])[g]
+				wheel_parts[g].append([mesh, wheel_transform])
 	model.free()
 	var all_body := AABB(body_min, body_max - body_min)
 
 	var wheels := []
 	for i in 4:
 		wheels.append({"center": hubs[i], "radius": radius, "front": i < 2, "parts": wheel_parts[i]})
-	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"]),
+	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"]), "handling": cfg.get("handling", {}),
 		"source_path": model_path, "source_transform": to_car}
 	_cache[model_path] = result
 	return result

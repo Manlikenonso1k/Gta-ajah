@@ -34,8 +34,12 @@ func _run() -> void:
 				var local_vertices := 0
 				var min_axle := INF
 				var max_axle := -INF
+				var center_sum := Vector2.ZERO
 				for part in wheel["parts"]:
 					var mesh: Mesh = part[0]
+					var tire_material: Material = mesh.surface_get_material(0)
+					if key == "vw_t3" and tire_material != null and tire_material.resource_name == "Material_body":
+						failures.append("%s/%s wheel %d: body-painted stray geometry remains attached" % [asset_dir.get_file(), key, i])
 					var transform: Transform3D = part[1]
 					var arrays: Array = mesh.surface_get_arrays(0)
 					tris += mesh.surface_get_array_index_len(0) / 3
@@ -47,6 +51,7 @@ func _run() -> void:
 						var vertex: Vector3 = vertices[index]
 						var point: Vector3 = transform * vertex
 						var radial := Vector2(point.y, point.z).length()
+						center_sum += Vector2(point.y, point.z)
 						tire_vertices += 1
 						min_radius = minf(min_radius, radial)
 						max_radius = maxf(max_radius, radial)
@@ -63,8 +68,11 @@ func _run() -> void:
 					failures.append("%s: non-tire geometry remains attached (radial extent %.3f, tire radius %.3f)" % [label, max_radius, expected_radius])
 				if min_axle == INF or max_axle - min_axle < expected_radius * 0.15:
 					failures.append("%s: tire has no useful axle width" % label)
-				print("%s %s wheel %d: %d tris, referenced vertices %d, radial %.3f..%.3f m, width %.3f m" % [
-					asset_dir.get_file(), key, i, tris, tire_vertices, min_radius, max_radius, max_axle - min_axle
+				var center_offset := center_sum.length() / maxf(float(tire_vertices), 1.0)
+				if key == "accord" and i < 2 and center_offset > expected_radius * 0.08:
+					failures.append("%s: tire mesh centre is eccentric by %.3f m" % [label, center_offset])
+				print("%s %s wheel %d: %d tris, referenced vertices %d, radial %.3f..%.3f m, width %.3f m, centre offset %.3f m" % [
+					asset_dir.get_file(), key, i, tris, tire_vertices, min_radius, max_radius, max_axle - min_axle, center_offset
 				])
 			var wheels: Array = data["wheels"]
 			var expected_axles: Array = cfg["wheels"]

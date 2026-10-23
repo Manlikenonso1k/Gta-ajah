@@ -24,14 +24,18 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | 6 | Android export preset and README "Android build" section | ✅ Configured; APK export needs local Android SDK/JDK/templates |
 | 7 | Tests: touch test, phone checklist | ✅ Desktop smoke, fake-touch and pause-menu tests pass; phone test remains |
 
-### Current task: vehicle visual fixes from `prompt.md`
+### Current task: vehicle QA, entry/exit, and handling
 
-Tire QA, the vehicle-specific bottom racing HUD, smooth entry/exit, and procedural driver steering are implemented. `tests/vehicle_tires_test.gd` audits all four extracted wheels on all 10 full-detail and 10 mobile models; all 80 wheel meshes pass. The Sprinter is the only imported model with an animated door clip, so it plays that clip; the other models use the timed character transition. The Android phone test is still outstanding.
+The previous tire/HUD task is followed by `prompt.md`'s entry/exit, tire, Sprinter door, handling, and transmission work. The stationary-car launch came from restoring the player's collision while the character still overlapped the vehicle body. Exit now keeps character collision disabled until the character reaches the outside point. Entry walks around the vehicle using exterior waypoints and `move_and_slide`; obstacles stop the character and cancel entry. The smoke test covers a passenger-side approach and two stationary exits.
+
+The Accord's two front wheel meshes were extracted with axle offsets of about 12 cm and 16 cm. Per-wheel corrections in `vehicle_model.gd` center those two visible meshes on their existing physics wheel mounts. On the VW T3, one `Material_body` triangle was incorrectly extracted into each tyre; those four body-painted faces are now omitted from wheel geometry, removing the rotating yellow shard without changing the van's materials. The Sprinter clip contains four door tracks; playback now enables only `Porte_avnt_1`, the +X driver's door. Per-model acceleration, braking, speed, steering, suspension, grip, and gear-ratio settings now distinguish sedans, SUVs, vans, buses, and the coach. RPM follows gear ratios, with automatic upshifts and downshifts; there is no clutch simulation.
+
+Automated checks passed: import, gameplay smoke (including repeated stationary exits), touch controls, phone pause menu, all 80 full-detail/mobile wheel meshes, and `tests/vehicle_rigs_test.gd`. Rendering-based visual checks and Android-device testing have not been completed in this headless environment.
 
 ### Where things are (quick map)
 
 - `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the world, spawns the cars and characters, and creates the HUD and phone pause menu.
-- `scripts/car.gd`: drivable `VehicleBody3D`, driver display, smoothed RPM estimate and safe-stop exit. Vehicle meshes are loaded and wheel triangles separated by `scripts/vehicle_model.gd`. **Don't change the handling values in `car.gd`.**
+- `scripts/car.gd`: drivable `VehicleBody3D`, driver display, per-model handling/transmission, and safe-stop exit. Vehicle meshes are loaded and wheel triangles separated by `scripts/vehicle_model.gd`.
 - `scripts/vehicle_hud.gd`: data-driven bottom nameplate, speedometer and tachometer styles for all 10 models.
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
 - Tests: `tests/smoke_test.gd` (entry, steering, driving, collision and exit), `tests/touch_controls_test.gd`, `tests/phone_menu_test.gd`, `tests/vehicle_tires_test.gd`, `tests/view_vehicle.gd`, `tests/view_vehicle_hud.gd`, and `tests/view_driver.gd`.
@@ -76,7 +80,7 @@ Tire QA, the vehicle-specific bottom racing HUD, smooth entry/exit, and procedur
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
 - **Display:** vehicle names in the bottom-left and a responsive speedometer/tachometer cluster while driving. Each model has its own name treatment, accent, gauge scale, tick layout and redline. The phone pause screen includes all control hints.
-- **Driving character:** a scaled procedural driver appears in the cabin; the arm pose follows actual steering input. Enter/exit uses a short positional transition and brakes to a stop before exit. The Sprinter's imported four-door animation is played; the other models do not contain door clips or rigs.
+- **Driving character:** a scaled procedural driver appears in the cabin; the arm pose follows actual steering input. Entry walks around the vehicle to the driver's door and cancels if collision blocks the route. During exit, character collision stays off until the player clears the car. The Sprinter's imported driver's door animation is played independently; other models do not contain door clips or rigs.
 
 ---
 
@@ -332,14 +336,14 @@ The camera's spring arm only collides with layer 1, so it never snaps in front o
 
 At most 25 ragdolls exist at once; the oldest is removed when a new one spawns.
 
-### Car tuning (in `scripts/car.gd`)
+### Car tuning (in `scripts/car.gd` and `scripts/vehicle_model.gd`)
 
-Values are for a 1200 kg car (`BASE_MASS`). Engine force, brakes and suspension strength are multiplied by `mass / 1200`, so a 13 t coach accelerates about like a car instead of crawling.
+Vehicle mass still scales force consistently, while each model now has its own acceleration target, top speed, braking, steering response, and (for vans and heavy vehicles) gear ratios. The ratios drive both the automatic shift estimate and displayed RPM. This is a simplified gearbox with no clutch simulation.
 
 | Setting | Value | Effect |
 |---|---|---|
-| `ENGINE` | 2500 | Engine force per rear wheel (rear-wheel drive) |
-| `BRAKE` / `HANDBRAKE` | 25 / 40 | Braking strength |
+| `ENGINE` / `BRAKE` | 2500 / 25 | Baseline force values; model handling supplies acceleration and service braking |
+| `HANDBRAKE` | 40 | Handbrake force, scaled by vehicle mass |
 | `suspension_max_force` | 12000 | Strongest push one wheel's spring can give |
 | `MAX_STEER` | 0.55 rad | Steering angle at low speed (drops to 0.2 at high speed) |
 | `TOP_SPEED` | 45 m/s | About 160 km/h |
@@ -379,9 +383,9 @@ To add a vehicle:
 
 ### Vehicle HUD and driver
 
-The cluster is built in `scripts/vehicle_hud.gd` and follows the current vehicle. Speed comes from `linear_velocity`. RPM is an explicitly approximate, smoothed estimate based on speed and throttle because `car.gd` does not simulate engine or gearbox internals. Each model supplies its own font preference (with system fallback), name treatment, accent, gauge scale, tick layout and redline.
+The cluster is built in `scripts/vehicle_hud.gd` and follows the current vehicle. Speed comes from `linear_velocity`. RPM follows a simplified automatic gearbox model using road speed, current gear ratios, throttle, and shift transitions; it is still a game approximation rather than a clutch or engine simulation. Each model supplies its own font preference (with system fallback), name treatment, accent, gauge scale, tick layout and redline.
 
-The driver is a scaled copy of the procedural character, parented to the car. Arm pivots respond to the same steering value used by keyboard and touch input. Entering moves the player to the driver's side and seat; exiting brakes until the car is nearly stopped, then moves them clear. Of the 10 imported assets, only the Sprinter includes door transform animation tracks. Its clip is reused in both directions; the others use the character transition because their models have no door rig or clip.
+The driver is a scaled copy of the procedural character, parented to the car. Arm pivots respond to the same steering value used by keyboard and touch input. Entry uses exterior waypoints and collision-aware walking; the short movement into the seat happens only after reaching the open driver's doorway. Exit brakes until the car is nearly stopped and keeps player collision disabled until the character is outside. Of the 10 imported assets, only the Sprinter includes door transform animation tracks. Its clip contains four doors, but only the +X driver's door track is enabled. Other models use the timed character transition because they have no door rig or clip.
 
 **Texture import:** set each model's textures to *VRAM Compressed* (select the extracted `.png` files in Godot's FileSystem dock → Import tab → Compress Mode → VRAM Compressed → Reimport). The default (lossless) made the cars take 20 seconds to load instead of under one.
 
@@ -413,9 +417,10 @@ godot --headless --path . --script tests/smoke_test.gd
 godot --headless --path . --script tests/touch_controls_test.gd
 godot --headless --path . --script tests/phone_menu_test.gd
 godot --headless --path . --script tests/vehicle_tires_test.gd
+godot --headless --path . --script tests/vehicle_rigs_test.gd
 ```
 
-The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. For a visual check with wheels highlighted in magenta:
+The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It also verifies that the Accord's corrected front wheels are centered. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. The rig check verifies that only the Sprinter driver's door track is active. For a visual check with wheels highlighted in magenta:
 
 ```bash
 godot --path . --script tests/view_vehicle.gd -- car camry town_bus coach
