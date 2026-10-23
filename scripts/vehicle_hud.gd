@@ -60,6 +60,9 @@ func _draw() -> void:
 		rpm_center.x = viewport.x * 0.69
 	_draw_gauge(speed_center, radius, speed, float(style["max_speed"]), "KM/H", "%.0f" % speed, style, font, false)
 	_draw_gauge(rpm_center, radius, rpm, float(style["rpm_max"]), "RPM", "%.1f" % (rpm / 1000.0), style, font, true)
+	if bool(car.get("redline_warning")):
+		var pulse := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.018)
+		draw_string(font, rpm_center + Vector2(-28.0, -radius - 17.0), "SHIFT", HORIZONTAL_ALIGNMENT_CENTER, 56.0, 12, Color(1.0, 0.18, 0.12, pulse))
 
 	var name_size: int = int(style["size"])
 	var design: String = style["design"]

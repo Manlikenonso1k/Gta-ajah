@@ -6,6 +6,7 @@ const PRESETS := {
 	"low": {
 		"pedestrians": 12,
 		"cars": 6,
+		"traffic": 1,
 		"ragdolls": 8,
 		"shadows": false,
 		"shadow_distance": 0.0,
@@ -19,6 +20,7 @@ const PRESETS := {
 	"medium": {
 		"pedestrians": 20,
 		"cars": 9,
+		"traffic": 2,
 		"ragdolls": 15,
 		"shadows": true,
 		"shadow_distance": 60.0,
@@ -29,12 +31,24 @@ const PRESETS := {
 	"high": {
 		"pedestrians": 30,
 		"cars": 13,
+		"traffic": 4,
 		"ragdolls": 25,
 		"shadows": true,
 		"shadow_distance": 120.0,
 		"fog_density": 0.0025,
 		"draw_distance": 1500.0,
 		"render_scale": 1.0,
+	},
+	"performance": {
+		"pedestrians": 16,
+		"cars": 9,
+		"traffic": 2,
+		"ragdolls": 12,
+		"shadows": true,
+		"shadow_distance": 65.0,
+		"fog_density": 0.0035,
+		"draw_distance": 650.0,
+		"render_scale": 0.8,
 	},
 }
 

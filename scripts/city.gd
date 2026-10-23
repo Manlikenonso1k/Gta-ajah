@@ -48,24 +48,29 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 		_box(city, Vector3(0.2, 0.02, HALF * 2), Vector3(road_line(k), 0.02, 0), Color(0.9, 0.75, 0.2), false)
 		_box(city, Vector3(HALF * 2, 0.02, 0.2), Vector3(0, 0.02, road_line(k)), Color(0.9, 0.75, 0.2), false)
 
-	var spawns := {"sidewalk": [], "parking": []}
+	var spawns := {"sidewalk": [], "parking": [], "chunks": []}
 	for i in GRID:
 		for j in GRID:
 			var c := block_center(i, j)
-			_box(city, Vector3(BLOCK, 0.1, BLOCK), c + Vector3(0, 0.05, 0), Color(0.62, 0.6, 0.56), false)
+			var chunk := Node3D.new()
+			chunk.name = "Block_%d_%d" % [i, j]
+			chunk.set_meta("stream_center", c)
+			city.add_child(chunk)
+			spawns["chunks"].append(chunk)
+			_box(chunk, Vector3(BLOCK, 0.1, BLOCK), c + Vector3(0, 0.05, 0), Color(0.62, 0.6, 0.56), false)
 			for lx in [-1, 1]:
 				for lz in [-1, 1]:
 					var lot := c + Vector3(lx * 9.5, 0, lz * 9.5)
 					if rng.randf() < 0.8:
-						_building(city, lot, rng)
+						_building(chunk, lot, rng)
 					else:
-						_palm(city, lot, rng)
+						_palm(chunk, lot, rng)
 			for n in 6:
 				var along := rng.randf_range(-BLOCK / 2 + 2, BLOCK / 2 - 2)
 				var edge := (BLOCK / 2 - 1.2) * (1 if rng.randf() < 0.5 else -1)
 				var p := Vector3(along, 0, edge) if n % 2 == 0 else Vector3(edge, 0, along)
 				if n < 2:
-					_palm(city, c + p * 1.02, rng)
+					_palm(chunk, c + p * 1.02, rng)
 				else:
 					spawns["sidewalk"].append(c + p + Vector3(0, 0.2, 0))
 
@@ -84,6 +89,21 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 			var pos := Vector3(road_line(k) + ROAD / 2 - 1.6, 0.6, z)
 			spawns["parking"].append(Transform3D(Basis(Vector3.UP, PI if n == 0 else 0.0), pos))
 	return spawns
+
+
+static func set_chunk_active(chunk: Node3D, active: bool) -> void:
+	if chunk.visible == active:
+		return
+	chunk.visible = active
+	var pending: Array[Node] = [chunk]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		if node is CollisionObject3D:
+			if not node.has_meta("stream_collision_layer"):
+				node.set_meta("stream_collision_layer", node.collision_layer)
+			node.collision_layer = int(node.get_meta("stream_collision_layer")) if active else 0
+		for child in node.get_children():
+			pending.append(child)
 
 
 static func _plane(parent: Node3D, size: Vector2, y: float, color: Color) -> void:

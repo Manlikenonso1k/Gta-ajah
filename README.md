@@ -24,21 +24,24 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 | 6 | Android export preset and README "Android build" section | ✅ Configured; APK export needs local Android SDK/JDK/templates |
 | 7 | Tests: touch test, phone checklist | ✅ Desktop smoke, fake-touch and pause-menu tests pass; phone test remains |
 
-### Current task: vehicle QA, entry/exit, and handling
+### Current task: vehicle physics, world systems, and performance
 
-The previous tire/HUD task is followed by `prompt.md`'s entry/exit, tire, Sprinter door, handling, and transmission work. The stationary-car launch came from restoring the player's collision while the character still overlapped the vehicle body. Exit now keeps character collision disabled until the character reaches the outside point. Entry walks around the vehicle using exterior waypoints and `move_and_slide`; obstacles stop the character and cancel entry. The smoke test covers a passenger-side approach and two stationary exits.
+The active follow-up in `prompt.md` adds passenger-weight suspension response, obstacle-aware vehicle entry, traction and RPM feedback, city-block streaming, persistent parking, road traffic and pedestrians. The Danfo tyre artifact was caused by a body-painted `Material_body` face from each wheel envelope being extracted and rotated with the rubber. `vehicle_model.gd` now filters only those four faces for the VW T3; the full/mobile mesh audit verifies no body-painted face remains on its tyres. The prior Accord wheel-centering and Sprinter driver's-door fixes remain in place.
 
-The Accord's two front wheel meshes were extracted with axle offsets of about 12 cm and 16 cm. Per-wheel corrections in `vehicle_model.gd` center those two visible meshes on their existing physics wheel mounts. On the VW T3, one `Material_body` triangle was incorrectly extracted into each tyre; those four body-painted faces are now omitted from wheel geometry, removing the rotating yellow shard without changing the van's materials. The Sprinter clip contains four door tracks; playback now enables only `Porte_avnt_1`, the +X driver's door. Per-model acceleration, braking, speed, steering, suspension, grip, and gear-ratio settings now distinguish sedans, SUVs, vans, buses, and the coach. RPM follows gear ratios, with automatic upshifts and downshifts; there is no clutch simulation.
+The player adds 75 kg through a smoothed vehicle mass target while seated. City buildings and props are grouped by the existing 5×5 blocks and distant block collisions are disabled, while the large ground/road collision remains persistent. Streaming uses a base radius plus a speed-scaled corridor ahead of the vehicle. Distant parked vehicles freeze while retaining their saved position, then resume physics nearby. Parked-car transforms use a versioned atomic `user://vehicle_state.json` save and invalid/out-of-world positions are rejected; a loaded car overlapping static geometry returns to its original spawn. Traffic follows rectangular road loops, with nearby cars using vehicle physics and distant cars advancing on quarter-second lightweight updates. Sidewalk pedestrians wander within a leash, pause, and react to nearby traffic; distant pedestrians stop processing until the player approaches. The `performance` quality preset can be selected with `--quality=performance`; F3 displays runtime FPS, frame-time, physics time, and entity counts. Alt+Enter toggles fullscreen.
 
-Automated checks passed: import, gameplay smoke (including repeated stationary exits), touch controls, phone pause menu, all 80 full-detail/mobile wheel meshes, and `tests/vehicle_rigs_test.gd`. Rendering-based visual checks and Android-device testing have not been completed in this headless environment.
+The entry approach uses a collision-shaped A* grid, retains `move_and_slide`, and replans up to three times if movement is blocked or the car moves. Grip blends with actual wheel contact, and the tachometer responds to driven-wheel contact and configured transmission/redline values. These are still game-level approximations: traffic is not a lane-by-lane road graph, pedestrians use bounded wandering rather than a NavMesh, and streamed city blocks are toggled from a fully generated scene rather than asynchronously loaded.
+
+Automated results and limitations are recorded under [Testing](#testing). The measured headless CPU baseline was 6.894 ms average frame time / 4.639 ms physics time; the combined result is recorded after the final profile run. This headless measurement does not quantify fullscreen GPU time. A visual Danfo driving pass, full-resolution fullscreen comparison, and Android device run still need a human/device check.
 
 ### Where things are (quick map)
 
 - `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the world, spawns the cars and characters, and creates the HUD and phone pause menu.
 - `scripts/car.gd`: drivable `VehicleBody3D`, driver display, per-model handling/transmission, and safe-stop exit. Vehicle meshes are loaded and wheel triangles separated by `scripts/vehicle_model.gd`.
+- `scripts/traffic.gd`, `scripts/vehicle_persistence.gd`: route traffic and versioned parked-car saves.
 - `scripts/vehicle_hud.gd`: data-driven bottom nameplate, speedometer and tachometer styles for all 10 models.
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
-- Tests: `tests/smoke_test.gd` (entry, steering, driving, collision and exit), `tests/touch_controls_test.gd`, `tests/phone_menu_test.gd`, `tests/vehicle_tires_test.gd`, `tests/view_vehicle.gd`, `tests/view_vehicle_hud.gd`, and `tests/view_driver.gd`.
+- Tests: `tests/smoke_test.gd` (entry, steering, driving, collision and exit), `tests/vehicle_contact_test.gd`, `tests/vehicle_persistence_test.gd`, `tests/world_systems_test.gd`, `tests/performance_profile.gd`, plus touch, phone, tire, rig and visual checks.
 
 ### Decisions and gotchas so far
 
@@ -76,7 +79,7 @@ Automated checks passed: import, gameplay smoke (including repeated stationary e
 - **City:** a generated 5×5 grid of city blocks with roads and yellow centre lines. Buildings come in cream, terracotta, pale blue and ochre, with dark window bands on each floor. There are palm trees, red laterite earth beyond the city, and a hazy tropical sky.
 - **Third-person player:** walks, runs and jumps relative to the camera, with simple arm and leg swing animation.
 - **Vehicles:** 13 drivable vehicles across 10 realistic models from Sketchfab: Toyota Corolla, Camry and Hiace, Mercedes G-Class and Sprinter, BMW E30, Honda Accord, a VW T3 danfo, a town bus and a coach. Each has suspension, spinning and steering wheels, handling scaled to its weight, steering that gets less sharp at speed, brakes and a handbrake. Press E to get in or out.
-- **Pedestrians:** 30 people wander the sidewalks.
+- **Pedestrians and traffic:** people wander within sidewalk bounds, pause, avoid obstacles and step away from nearby traffic. AI cars follow rectangular routes on the city roads; distant traffic advances on a low-frequency lightweight update.
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
 - **Display:** vehicle names in the bottom-left and a responsive speedometer/tachometer cluster while driving. Each model has its own name treatment, accent, gauge scale, tick layout and redline. The phone pause screen includes all control hints.
@@ -418,6 +421,10 @@ godot --headless --path . --script tests/touch_controls_test.gd
 godot --headless --path . --script tests/phone_menu_test.gd
 godot --headless --path . --script tests/vehicle_tires_test.gd
 godot --headless --path . --script tests/vehicle_rigs_test.gd
+godot --headless --path . --script tests/vehicle_contact_test.gd
+godot --headless --path . --script tests/vehicle_persistence_test.gd
+godot --headless --path . --script tests/world_systems_test.gd
+godot --headless --path . --script tests/performance_profile.gd
 ```
 
 The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It also verifies that the Accord's corrected front wheels are centered. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. The rig check verifies that only the Sprinter driver's door track is active. For a visual check with wheels highlighted in magenta:
@@ -428,6 +435,10 @@ godot --path . --script tests/view_vehicle_hud.gd
 godot --path . --script tests/view_driver.gd
 godot --path . --script tests/view_driver.gd -- sprinter
 ```
+
+`vehicle_contact_test.gd` checks grounded wheel contact, gradual 75 kg passenger loading, and grip reduction/recovery after a short lift. `vehicle_persistence_test.gd` checks the versioned save round-trip and rejects an under-map transform. `world_systems_test.gd` checks that distant traffic continues with reduced physics work, far blocks deactivate, and the permanent ground collider remains. `performance_profile.gd` measures headless CPU frame and physics time; it cannot measure fullscreen GPU load. Press **F3** in-game for a live overlay, use **Alt+Enter** to toggle fullscreen, and try `--quality=performance` if needed.
+
+Latest repeat profile (Godot 4.7.2, High preset, 240 measured frames; includes 13 parked cars, 4 traffic cars and 30 pedestrians): **6.901 ms average frame, 10.093 ms max frame, 2.063 ms physics, 2,782 nodes**. Before this task: 6.894 ms average, 12.882 ms max, 4.639 ms physics, 2,558 nodes, and no traffic. CPU average is effectively unchanged while the physics monitor was about 56% lower in this sample with more entities. Repeated samples varied substantially (one run included a 109.684 ms outlier), so this CPU-side benchmark does not establish a fullscreen improvement. Fullscreen comparison and actual Danfo road/terrain viewing still require manual testing.
 
 Expected output:
 
@@ -555,17 +566,18 @@ Measured 2026-10-22, before any mobile work. Triangle and texture counts were re
 
 ### Quality presets
 
-`scripts/quality.gd` holds three presets. Phones (`OS.has_feature("mobile")`) start on **Low**, desktops on **High**. To try another one, run `godot --path . -- --quality=low` (or `medium`, `high`); the chosen preset is printed at startup.
+`scripts/quality.gd` holds four presets. Phones (`OS.has_feature("mobile")`) start on **Low**, desktops on **High**. To try another one, run `godot --path . -- --quality=low` (or `medium`, `high`, `performance`); the chosen preset is printed at startup.
 
-| Setting | Low | Medium | High |
-|---|---:|---:|---:|
-| Pedestrians | 12 | 20 | 30 |
-| Vehicles | 6 | 9 | 13 |
-| Ragdoll limit | 8 | 15 | 25 |
-| Sun shadows | off | 60 m | 120 m |
-| Fog density | 0.006 (hides the short draw distance) | 0.004 | 0.0025 |
-| Draw distance | 250 m | 600 m | 1500 m |
-| 3D render resolution | 70% | 85% | 100% |
+| Setting | Low | Medium | High | Performance |
+|---|---:|---:|---:|---:|
+| Pedestrians | 12 | 20 | 30 | 16 |
+| Parked vehicles | 6 | 9 | 13 | 9 |
+| AI traffic | 1 | 2 | 4 | 2 |
+| Ragdoll limit | 8 | 15 | 25 | 12 |
+| Sun shadows | off | 60 m | 120 m | 65 m |
+| Fog density | 0.006 | 0.004 | 0.0025 | 0.0035 |
+| Draw distance | 250 m | 600 m | 1500 m | 650 m |
+| 3D render resolution | 70% | 85% | 100% | 80% |
 
 The render resolution only scales the 3D scene (bilinear upscaling, which the Compatibility renderer supports, confirmed on Godot 4.7.2); the HUD and touch controls stay sharp. Reduced crowds and parked cars are spread evenly across the city instead of filling the first blocks.
 ---
@@ -594,7 +606,7 @@ The render resolution only scales the 3D scene (bilinear upscaling, which the Co
 - [ ] Lexus RX and Toyota Sienna (the downloaded models were broken: missing wheels)
 - [ ] A rigged and animated character model, with a ragdoll built on its skeleton
 - [ ] Port Harcourt landmarks: Garrison roundabout, the waterfront and creeks, Mile 1 market
-- [ ] AI traffic and smarter pedestrians
+- [x] Basic road-loop AI traffic and bounded wandering pedestrians (see [current task](#current-task-vehicle-physics-world-systems-and-performance))
 - [ ] Day/night cycle and street lights
 - [ ] Weapons, wanted level, police
 - [ ] Missions and a minimap

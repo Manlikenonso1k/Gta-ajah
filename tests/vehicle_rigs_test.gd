@@ -23,6 +23,7 @@ func _run() -> void:
 		if candidate.model == "sprinter":
 			car = candidate
 			break
+	car.set_physics_process(true)
 	if car._door_animation == null:
 		push_error("Sprinter door animation was not loaded")
 		quit(1)
@@ -37,10 +38,10 @@ func _run() -> void:
 		quit(1)
 		return
 	car.driver = main
-	car.linear_velocity = car.global_basis.z * 25.0
-	Input.action_press("move_forward")
-	await physics_frame
-	Input.action_release("move_forward")
+	# Exercise the gearbox at a speed that actually crosses the Sprinter's
+	# configured first-gear shift point, then allow its downshift timer to run.
+	car.linear_velocity = car.global_basis.z * 33.0
+	for i in 8: await physics_frame
 	var shifted_up: bool = car.current_gear > 1
 	car.linear_velocity = Vector3.ZERO
 	for i in 30: await physics_frame

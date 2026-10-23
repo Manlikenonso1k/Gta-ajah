@@ -13,6 +13,8 @@ const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 const Quality = preload("res://scripts/quality.gd")
 const PhoneMenu = preload("res://scripts/phone_menu.gd")
 const VehicleHud = preload("res://scripts/vehicle_hud.gd")
+const VehiclePersistence = preload("res://scripts/vehicle_persistence.gd")
+const Traffic = preload("res://scripts/traffic.gd")
 
 ## Models from VehicleModel.MODELS, cycled through the spawn points
 const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
@@ -23,6 +25,13 @@ var _touch: Control = null
 var _vehicle_hud: Control
 var _phone: PanelContainer
 var _paused := false
+var _chunks: Array = []
+var _saved_vehicle_states: Dictionary = {}
+var _vehicle_sequence := 0
+var _stream_timer := 0.0
+var _save_timer := 0.0
+var _perf_timer := 0.0
+var _perf_label: Label
 
 
 func _ready() -> void:
@@ -36,7 +45,9 @@ func _ready() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
+	_saved_vehicle_states = VehiclePersistence.load_states()
 	var spawns := City.build(self, rng)
+	_chunks = spawns["chunks"]
 
 	var rig := CameraRig.new()
 	add_child(rig)
@@ -57,25 +68,133 @@ func _ready() -> void:
 		var ped := Pedestrian.new()
 		ped.colors = Ragdoll.random_colors(rng)
 		ped.position = points[i * points.size() / walkers]
+		ped.wander_origin = ped.position
 		add_child(ped)
+		ped.add_to_group("pedestrians")
 
 	_player = Player.new()
 	_player.camera_rig = rig
 	_player.position = Vector3(City.road_line(3) - 1, 0.2, 5)
 	add_child(_player)
+	var traffic := Traffic.new()
+	add_child(traffic)
+	traffic.setup(self, int(quality.get("traffic", 2)))
 
 	_setup_hud(rig)
+	_update_streaming()
+	_validate_loaded_vehicle_placements.call_deferred()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_vehicle_hud.set_vehicle(_player.car)
+	_stream_timer += delta
+	_save_timer += delta
+	if _stream_timer >= 0.5:
+		_stream_timer = 0.0
+		_update_streaming()
+	if _save_timer >= 5.0:
+		_save_timer = 0.0
+		save_vehicle_states()
+	if _perf_label != null and _perf_label.visible:
+		_perf_timer += delta
+		if _perf_timer >= 0.25:
+			_perf_timer = 0.0
+			_update_perf_label()
 
 
 func _spawn_car(xform: Transform3D, model: String) -> void:
 	var car := Car.new()
 	car.model = model
-	car.transform = xform
+	car.persistent_id = "%s_%03d" % [model, _vehicle_sequence]
+	_vehicle_sequence += 1
+	car.original_spawn_transform = xform
+	car.transform = VehiclePersistence.transform_from_state(_saved_vehicle_states.get(car.persistent_id), xform)
 	add_child(car)
+	car.add_to_group("persistent_vehicles")
+
+
+func save_vehicle_states() -> void:
+	var vehicles := _saved_vehicle_states.duplicate(true)
+	for car in get_tree().get_nodes_in_group("persistent_vehicles"):
+		if not is_instance_valid(car) or car.persistent_id.is_empty():
+			continue
+		var p: Vector3 = car.global_position
+		if p.y < -0.5 or p.y > 20.0 or absf(p.x) > 240.0 or absf(p.z) > 240.0 or car.global_basis.y.y < 0.45 or _vehicle_overlaps_static(car):
+			continue
+		vehicles[car.persistent_id] = VehiclePersistence.state_from_transform(car.global_transform)
+	_saved_vehicle_states = vehicles
+	VehiclePersistence.save_states(vehicles)
+
+
+func _validate_loaded_vehicle_placements() -> void:
+	await get_tree().physics_frame
+	for car in get_tree().get_nodes_in_group("persistent_vehicles"):
+		if _vehicle_overlaps_static(car):
+			car.global_transform = car.original_spawn_transform
+			car.linear_velocity = Vector3.ZERO
+			car.angular_velocity = Vector3.ZERO
+
+
+func _vehicle_overlaps_static(car: Node3D) -> bool:
+	var shape_node := car.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape_node == null or shape_node.shape == null:
+		return false
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape_node.shape
+	query.transform = car.global_transform * shape_node.transform
+	query.collision_mask = 1
+	query.exclude = [car.get_rid()]
+	return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+func _update_streaming() -> void:
+	if _player == null:
+		return
+	var focus: Node3D = _player.car if _player.car != null else _player
+	var speed: float = focus.linear_velocity.length() if focus is RigidBody3D else 0.0
+	var load_radius := 80.0 + minf(speed * 0.8, 60.0)
+	var travel_direction := Vector3(focus.global_basis.z.x, 0.0, focus.global_basis.z.z).normalized()
+	var forward_range := 80.0 + minf(speed * 2.5, 140.0)
+	var moving_cars: Array = []
+	for vehicle in get_tree().get_nodes_in_group("cars"):
+		if vehicle.linear_velocity.length() > 1.0:
+			moving_cars.append(vehicle)
+	for chunk: Node3D in _chunks:
+		var center: Vector3 = chunk.get_meta("stream_center")
+		var offset := Vector3(center.x - focus.global_position.x, 0.0, center.z - focus.global_position.z)
+		var projected := offset.dot(travel_direction)
+		var lateral := (offset - travel_direction * projected).length()
+		var unload_margin := 18.0 if chunk.visible else 0.0
+		var active := offset.length() <= load_radius + unload_margin or (projected > 0.0 and projected <= forward_range + unload_margin and lateral <= 64.0 + unload_margin)
+		if not active:
+			for vehicle in moving_cars:
+				if Vector2(center.x - vehicle.global_position.x, center.z - vehicle.global_position.z).length() < 42.0:
+					active = true
+					break
+		City.set_chunk_active(chunk, active)
+	for pedestrian in get_tree().get_nodes_in_group("pedestrians"):
+		var near_player: bool = pedestrian.global_position.distance_to(focus.global_position) < load_radius
+		pedestrian.set_physics_process(near_player)
+		pedestrian.collision_layer = 4 if near_player else 0
+	for vehicle in get_tree().get_nodes_in_group("persistent_vehicles"):
+		var vehicle_distance: float = vehicle.global_position.distance_to(focus.global_position)
+		var near_player: bool = vehicle_distance < load_radius + (0.0 if vehicle.freeze else 18.0)
+		var should_simulate: bool = near_player or vehicle.driver != null or vehicle.linear_velocity.length() >= 1.0
+		if should_simulate:
+			if vehicle.freeze:
+				vehicle.freeze = false
+			vehicle.set_physics_process(true)
+		else:
+			vehicle.linear_velocity = Vector3.ZERO
+			vehicle.angular_velocity = Vector3.ZERO
+			vehicle.set_physics_process(false)
+			vehicle.freeze = true
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_vehicle_states()
+		get_tree().quit()
 
 
 func _setup_input() -> void:
@@ -151,6 +270,16 @@ func _setup_hud(rig: Node3D) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_F3:
+		_perf_label.visible = not _perf_label.visible
+		_update_perf_label()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and event.alt_pressed and event.keycode == KEY_ENTER:
+		var mode := DisplayServer.window_get_mode()
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if mode == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and not event.is_echo():
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
@@ -212,6 +341,16 @@ func _build_phone_menu(layer: CanvasLayer) -> void:
 	hints.add_theme_color_override("font_color", Color(0.88, 0.92, 0.89))
 	hints.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	guide_scroll.add_child(hints)
+	_perf_label = Label.new()
+	_perf_label.visible = false
+	_perf_label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_perf_label.position = Vector2(-300.0, 12.0)
+	_perf_label.size = Vector2(286.0, 100.0)
+	_perf_label.add_theme_color_override("font_color", Color(0.65, 1.0, 0.78))
+	_perf_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	_perf_label.add_theme_constant_override("shadow_offset_x", 1)
+	_perf_label.add_theme_constant_override("shadow_offset_y", 1)
+	layer.add_child(_perf_label)
 	var resume := Button.new()
 	resume.text = "RESUME GAME"
 	resume.custom_minimum_size.y = 48
@@ -231,3 +370,12 @@ func _layout_phone() -> void:
 	var view := get_viewport().get_visible_rect().size
 	_phone.size = Vector2(minf(410.0, view.x * 0.84), minf(580.0, view.y * 0.9))
 	_phone.position = (view - _phone.size) / 2.0
+
+
+func _update_perf_label() -> void:
+	var physics_ms := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	var cars := get_tree().get_nodes_in_group("cars").size()
+	var pedestrians := get_tree().get_nodes_in_group("pedestrians").size()
+	_perf_label.text = "FPS %d  |  frame %.1f ms\nphysics %.1f ms\nvehicles %d  people %d\nF3 hides this panel" % [
+		Engine.get_frames_per_second(), 1000.0 / maxf(Engine.get_frames_per_second(), 1), physics_ms, cars, pedestrians
+	]
