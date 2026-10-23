@@ -34,7 +34,7 @@ The entry approach uses a collision-shaped A* grid, retains `move_and_slide`, an
 
 Automated results and limitations are recorded under [Testing](#testing). The measured headless CPU baseline was 6.894 ms average frame time / 4.639 ms physics time; the combined result is recorded after the final profile run. This headless measurement does not quantify fullscreen GPU time. A visual Danfo driving pass, full-resolution fullscreen comparison, and Android device run still need a human/device check.
 
-### Current task: pedestrian character library (`prompt.md`)
+### Completed task: pedestrian character library (`prompt.md`)
 
 **Status: real characters are in the game; the stick-figure pedestrians are replaced.** The player character is unchanged, as the prompt requires.
 
@@ -52,6 +52,43 @@ Automated results and limitations are recorded under [Testing](#testing). The me
 | Next ideas | Ragdoll on the real skeleton; Mixamo idle/walk clips; more outfits (Nigerian prints, kaftans) via new MakeHuman clothes or bought models |
 
 **Generating characters needs** Blender 4.5 with the MPFB 2 extension and the MakeHuman CC0 asset packs installed. On the dev Mac these are already set up; on a new machine see [Pedestrian characters](#pedestrian-characters). See also [the pedestrian catalogue](docs/PEDESTRIAN_CATALOG.md).
+
+### Current task: Tasks 1–4 by an agent team (`prompt-lead.md`)
+
+Specs: `prompt-1-realistic-ragdoll.md`, `prompt-2-natural-animation.md`, `prompt-3-traffic-and-pavements.md`, `prompt-4-player-and-drivers.md` (repo root). A lead coordinates, commits and keeps this README current; five teammates build. Godot and Blender are run only through `tools/locked.sh` (one at a time; a stale `.tool_lock` folder after a crash can be deleted).
+
+| Phase | Teammate | Work | Status |
+|---|---|---|---|
+| 1 | `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll | ⏳ Started |
+| 1 | `animator` | Task 2: find/licence/download clips now; retarget after the bone names arrive | ⏳ Started |
+| 1 | `traffic` | Task 3: road graph, lanes, AI driving, pavements and crossings | ⏳ Started |
+| 1 | `vehicles` | Task 4 steps 1–2: player model ("Young PH hustler": Black African man, ~25, ~1.80 m, athletic, dark skin, short black fade, casual shirt, jeans, trainers), seat and steering-wheel measurements, steering wheels cut out | ⏳ Started (step 2 first) |
+| 1 | `qa` | Baseline tests and profile in `docs/QA_REPORT.md`, then review each task | ✅ Baseline done (all 9 tests pass; headless ~6.9 ms/frame both presets; windowed High 25.2 fps, Low 57.5 fps at 1280×720 on the dev Mac). Reviewing as tasks finish |
+| 2 | `vehicles` | Task 4 steps 3–5: hands on wheel, realistic player, drivers and passengers in traffic | ⬜ After `ragdoll`, `animator`, `vehicles` approved by `qa` |
+
+**File ownership.** Only the owner edits a file; anyone else messages the owner with the exact change needed. Ownership changes are recorded here.
+
+| Owner | Files |
+|---|---|
+| `ragdoll` | `scripts/ragdoll.gd`, new skeleton/ragdoll scripts (`scripts/skeleton_map.gd`, `scripts/realistic_ragdoll.gd`, `scripts/ragdoll_*.gd`), the characters' `.glb.import` files under `assets/characters/`, `tests/ragdoll_models_test.gd`, `tests/view_ragdoll.gd`, `tests/skeleton_test.gd` |
+| `animator` | `scripts/pedestrian.gd`, `scripts/humanoid_walk.gd`, `scripts/pedestrian_registry.gd`, new animation scripts (`scripts/locomotion*.gd`, `scripts/animation_*.gd`), `assets/animations/`, `tests/pedestrian_models_test.gd`, `tests/view_animation.gd` |
+| `traffic` | `scripts/city.gd`, `scripts/traffic.gd`, `scripts/car.gd`, new road, pavement and pedestrian-navigation scripts (`scripts/road_graph.gd`, `scripts/pavement_graph.gd`, `scripts/pedestrian_navigation.gd`, `scripts/traffic_debug.gd`), `tests/world_systems_test.gd`, `tests/view_traffic.gd` |
+| `vehicles` | `scripts/vehicle_model.gd`, `assets/models/cars/vehicles.json`, `blender/make_player.py`, `assets/characters/player/`, `blender/make_mobile_cars.py`, `assets/models/cars/mobile/`, `tests/view_vehicle.gd`, `tests/view_driver.gd`, `tests/vehicle_tires_test.gd`, `tests/vehicle_rigs_test.gd`, new `tests/steering_*.gd` |
+| `qa` | new `tests/qa_*.gd` files and `docs/QA_REPORT.md` only |
+| lead | `scripts/main.gd`, `scripts/player.gd`, `README.md`, `.gitignore`, `project.godot`, `docs/TEAM_TASKS.md`, `tools/`, and every file not listed above |
+
+Notes on shared code: the car-hit call in `car.gd` (owner `traffic`) and `hit_by_vehicle()` in `pedestrian.gd` (owner `animator`) are changed by those owners at `ragdoll`'s request. In Phase 2 `vehicles` keeps driver/occupant/steering-wheel code in new scripts (for example `scripts/vehicle_occupants.gd`, `scripts/steering_wheel.gd`) and asks `traffic` for the hook lines in `car.gd`/`traffic.gd`; `player.gd` moves to `vehicles` in Phase 2.
+
+### Interfaces between tasks
+
+Agreed interfaces are recorded here by the lead as teammates settle them.
+
+- **Standard bone names (ragdoll → everyone):** _pending_
+- **Ragdoll start function (ragdoll → everyone):** _pending_
+- **Locomotion function and states (animator → traffic, vehicles):** `set_locomotion(speed: float, state: String)` on the pedestrian node; states `idle`, `walk`, `run`, `wait_at_kerb` (proposed by traffic, to be confirmed by animator).
+- **Pedestrian navigation hook (traffic → animator):** `scripts/pedestrian_navigation.gd` (owner traffic). `pedestrian.gd` creates `navigation = PedestrianNavigation.new(self)` at the end of `_ready()`; each physics frame it keeps gravity, calls `navigation.physics_step(delta)` (sets `velocity.x/z` and `rotation.y`, calls `set_locomotion` if present), then `move_and_slide()`, then poses the animation from velocity.
+- **Seat and steering-wheel data in `vehicles.json` (vehicles → Phase 2):** _pending_
+- **How traffic cars are spawned and driven (traffic → Phase 2):** _pending_
 
 ### Where things are (quick map)
 
