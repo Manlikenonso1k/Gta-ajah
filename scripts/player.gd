@@ -19,6 +19,7 @@ var _phase := 0.0
 var _ragdoll_pelvis: RigidBody3D = null
 var _ragdoll_timer := 0.0
 var _enter_cooldown := 0.0
+var _interaction_busy := false
 
 
 func _ready() -> void:
@@ -43,6 +44,8 @@ func _physics_process(delta: float) -> void:
 		_ragdoll_timer -= delta
 		if _ragdoll_timer <= 0.0 or not is_instance_valid(_ragdoll_pelvis):
 			_get_up()
+		return
+	if _interaction_busy:
 		return
 
 	if not is_on_floor():
@@ -80,18 +83,52 @@ func _try_enter_car() -> void:
 			nearest = c
 	if nearest == null:
 		return
+	_interaction_busy = true
+	velocity = Vector3.ZERO
+	global_rotation.y = nearest.global_rotation.y + PI / 2.0
+	collision_layer = 0
+	collision_mask = 0
+	Ragdoll.animate_driver(_limbs, 0.0)
+	var door_point: Vector3 = nearest.to_global(nearest.driver_door_point())
+	var seat_point: Vector3 = nearest.to_global(nearest.driver_seat_point())
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "global_position", door_point, 0.28)
+	await tween.finished
+	await nearest.animate_driver_door(true)
+	var enter_tween := create_tween()
+	enter_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	enter_tween.tween_property(self, "global_position", seat_point, 0.32)
+	await enter_tween.finished
+	await nearest.animate_driver_door(false)
+	if not is_instance_valid(nearest):
+		_interaction_busy = false
+		_set_active(true)
+		return
+	global_rotation.y = nearest.global_rotation.y + PI
 	car = nearest
 	_set_active(false)
 	car.start_driving(self)
 	camera_rig.follow(car, 1.4, true)
+	_interaction_busy = false
 
 
-func exit_car(position_: Vector3) -> void:
-	car = null
-	global_position = position_
+func begin_exit_car(vehicle: Node3D, position_: Vector3) -> void:
+	_interaction_busy = true
+	await vehicle.animate_driver_door(true)
+	global_position = vehicle.to_global(vehicle.driver_seat_point())
+	global_rotation.y = vehicle.global_rotation.y + PI
 	velocity = Vector3.ZERO
-	_enter_cooldown = 0.3
 	_set_active(true)
+	vehicle.finish_driver_exit()
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "global_position", position_, 0.42)
+	await tween.finished
+	await vehicle.animate_driver_door(false)
+	car = null
+	_enter_cooldown = 0.4
+	_interaction_busy = false
 	camera_rig.follow(self, 1.6)
 
 

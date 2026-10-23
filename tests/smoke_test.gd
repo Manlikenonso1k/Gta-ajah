@@ -33,7 +33,19 @@ func _run() -> void:
 	player.global_position = car.global_position + Vector3(1.5, 0, 0)
 	await _frames(5)
 	player._try_enter_car()
+	await _frames(45)
 	print("driving: ", player.car == car)
+	Input.action_press("move_left")
+	await _frames(20)
+	var left_steer := car.steering
+	var left_arm: float = car._driver_limbs["arm_l"].rotation.z
+	Input.action_release("move_left")
+	Input.action_press("move_right")
+	await _frames(20)
+	var right_steer := car.steering
+	var right_arm: float = car._driver_limbs["arm_l"].rotation.z
+	Input.action_release("move_right")
+	print("driver steering pose: ", left_steer > 0.05 and right_steer < -0.05 and left_arm < right_arm)
 	var ped = load("res://scripts/pedestrian.gd").new()
 	ped.colors = {"skin": Color.BROWN, "shirt": Color.WHITE, "pants": Color.BLACK}
 	ped.position = car.global_position + car.global_basis.z * 30.0 + Vector3(0, 0.2, 0)
@@ -47,4 +59,8 @@ func _run() -> void:
 	Input.action_release("move_forward")
 	print("car speed km/h: ", roundi(car.linear_velocity.length() * 3.6), "  upright: ", car.global_basis.y.y > 0.9)
 	print("pedestrian ragdolled: ", get_nodes_in_group("ragdolls").size() > before, "  ped freed: ", not is_instance_valid(ped))
+	Input.action_press("interact")
+	await _frames(480)
+	Input.action_release("interact")
+	print("safe exit after braking: ", player.car == null and player.visible)
 	quit()

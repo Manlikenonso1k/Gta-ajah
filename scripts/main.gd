@@ -12,15 +12,15 @@ const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
 
 const Quality = preload("res://scripts/quality.gd")
 const PhoneMenu = preload("res://scripts/phone_menu.gd")
+const VehicleHud = preload("res://scripts/vehicle_hud.gd")
 
 ## Models from VehicleModel.MODELS, cycled through the spawn points
 const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
 	"sprinter", "town_bus", "coach"]
 
 var _player: CharacterBody3D
-var _hud: Label
 var _touch: Control = null
-var _vehicle_name: Label
+var _vehicle_hud: Control
 var _phone: PanelContainer
 var _paused := false
 
@@ -68,14 +68,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	var text := ""
-	if _player.car != null:
-		var speed := roundi(_player.car.linear_velocity.length() * 3.6)
-		text = "%d km/h" % speed
-	_hud.text = text
-	_vehicle_name.visible = _player.car != null
-	if _player.car != null:
-		_vehicle_name.text = _car_title(_player.car.model)
+	_vehicle_hud.set_vehicle(_player.car)
 
 
 func _spawn_car(xform: Transform3D, model: String) -> void:
@@ -143,32 +136,17 @@ func _setup_environment(quality: Dictionary) -> void:
 func _setup_hud(rig: Node3D) -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	_hud = Label.new()
-	_hud.position = Vector2(16, 12)
-	_hud.add_theme_font_size_override("font_size", 18)
-	_hud.add_theme_color_override("font_outline_color", Color.BLACK)
-	_hud.add_theme_constant_override("outline_size", 6)
-	layer.add_child(_hud)
-	_vehicle_name = Label.new()
-	_vehicle_name.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_vehicle_name.position = Vector2(-300, 22)
-	_vehicle_name.size = Vector2(280, 42)
-	_vehicle_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_vehicle_name.add_theme_font_size_override("font_size", 24)
-	_vehicle_name.add_theme_color_override("font_color", Color(1.0, 0.82, 0.28))
-	_vehicle_name.add_theme_color_override("font_outline_color", Color(0.08, 0.07, 0.05))
-	_vehicle_name.add_theme_constant_override("outline_size", 6)
-	_vehicle_name.visible = false
-	layer.add_child(_vehicle_name)
-
 	if TouchControls.wanted():
 		_touch = TouchControlsScene.instantiate()
 		_touch.camera_rig = rig
 		_touch.player = _player
 		layer.add_child(_touch)
 		_touch.menu_requested.connect(_toggle_pause)
-		# Keep the text clear of notches
-		_hud.position = _touch.safe_rect().position + Vector2(16, 12)
+	_vehicle_hud = Control.new()
+	_vehicle_hud.set_script(VehicleHud)
+	_vehicle_hud.touch_mode = _touch != null
+	_vehicle_hud.touch_controls = _touch
+	layer.add_child(_vehicle_hud)
 	_build_phone_menu(layer)
 
 
@@ -253,10 +231,3 @@ func _layout_phone() -> void:
 	var view := get_viewport().get_visible_rect().size
 	_phone.size = Vector2(minf(410.0, view.x * 0.84), minf(580.0, view.y * 0.9))
 	_phone.position = (view - _phone.size) / 2.0
-
-
-func _car_title(model: String) -> String:
-	var names := {"corolla": "TOYOTA COROLLA", "camry": "TOYOTA CAMRY", "benz_g": "MERCEDES G-CLASS",
-		"bmw_e30": "BMW E30", "accord": "HONDA ACCORD", "sprinter": "MERCEDES SPRINTER",
-		"hiace": "TOYOTA HIACE", "vw_t3": "VW T3 DANFO", "town_bus": "CITY BUS", "coach": "LUXURY COACH"}
-	return names.get(model, model.to_upper())

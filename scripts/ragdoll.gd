@@ -140,6 +140,20 @@ static func animate(limbs: Dictionary, phase: float, amount: float) -> void:
 	limbs["leg_r"].rotation.x = swing
 
 
+## Seated pose with forearms reaching toward the wheel. The steering response
+## follows VehicleBody3D.steering, including analog touch input.
+static func animate_driver(limbs: Dictionary, steering: float) -> void:
+	var turn := clampf(steering / 0.55, -1.0, 1.0)
+	limbs["arm_l"].rotation.x = -0.82
+	limbs["arm_r"].rotation.x = -0.82
+	limbs["arm_l"].rotation.z = -0.16 - turn * 0.22
+	limbs["arm_r"].rotation.z = 0.16 - turn * 0.22
+	limbs["arm_l"].rotation.y = turn * 0.18
+	limbs["arm_r"].rotation.y = turn * 0.18
+	limbs["leg_l"].rotation.x = 0.28
+	limbs["leg_r"].rotation.x = 0.28
+
+
 ## Spawns a physics ragdoll matching a character at `xform` and returns its pelvis.
 static func spawn(parent: Node, xform: Transform3D, colors: Dictionary, velocity: Vector3) -> RigidBody3D:
 	var old := parent.get_tree().get_nodes_in_group("ragdolls")

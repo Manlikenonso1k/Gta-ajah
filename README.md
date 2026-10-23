@@ -26,14 +26,15 @@ Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range 
 
 ### Current task: vehicle visual fixes from `prompt.md`
 
-The first stage is complete: wheel extraction now rejects large body and fender triangles that used to be assigned to rotating tires. `tests/vehicle_tires_test.gd` audits all four extracted wheels on all 10 full-detail and 10 mobile models; all 80 wheel meshes pass. The Camry, town bus, coach and other representative models were also rendered with the wheels highlighted. The remaining prompt work is the vehicle-specific bottom racing HUD, entry/exit transitions and driver steering animation.
+Tire QA, the vehicle-specific bottom racing HUD, smooth entry/exit, and procedural driver steering are implemented. `tests/vehicle_tires_test.gd` audits all four extracted wheels on all 10 full-detail and 10 mobile models; all 80 wheel meshes pass. The Sprinter is the only imported model with an animated door clip, so it plays that clip; the other models use the timed character transition. The Android phone test is still outstanding.
 
 ### Where things are (quick map)
 
-- `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the sky/sun/fog, spawns the city, cars, pedestrians and player, and builds the HUD and phone pause menu.
-- `scripts/car.gd`: drivable `VehicleBody3D`. Gets its meshes from `scripts/vehicle_model.gd`, which loads a `.glb` from `assets/models/cars/real/` or `assets/models/cars/mobile/` on mobile, scales it from a per-model config, and cuts the wheels out of the mesh at load time. **Don't change the handling values in `car.gd`.**
+- `scripts/main.gd`: entry point. Registers input actions in code (`_setup_input`), builds the world, spawns the cars and characters, and creates the HUD and phone pause menu.
+- `scripts/car.gd`: drivable `VehicleBody3D`, driver display, smoothed RPM estimate and safe-stop exit. Vehicle meshes are loaded and wheel triangles separated by `scripts/vehicle_model.gd`. **Don't change the handling values in `car.gd`.**
+- `scripts/vehicle_hud.gd`: data-driven bottom nameplate, speedometer and tachometer styles for all 10 models.
 - `scripts/player.gd`, `pedestrian.gd`, `ragdoll.gd` (shared body and ragdoll), `camera_rig.gd` (mouse orbit camera), `city.gd` (generated city and spawn points).
-- Tests: `tests/smoke_test.gd` (headless gameplay check), `tests/touch_controls_test.gd` (fake touch input check), `tests/phone_menu_test.gd` (pause flow), `tests/vehicle_tires_test.gd` (all 10 real and mobile vehicle wheel meshes), and `tests/view_vehicle.gd` (renders vehicle views for measuring).
+- Tests: `tests/smoke_test.gd` (entry, steering, driving, collision and exit), `tests/touch_controls_test.gd`, `tests/phone_menu_test.gd`, `tests/vehicle_tires_test.gd`, `tests/view_vehicle.gd`, `tests/view_vehicle_hud.gd`, and `tests/view_driver.gd`.
 
 ### Decisions and gotchas so far
 
@@ -74,7 +75,8 @@ The first stage is complete: wheel extraction now rejects large body and fender 
 - **Pedestrians:** 30 people wander the sidewalks.
 - **Ragdoll physics:** any character hit by a car faster than about 15 km/h becomes an 11-part jointed ragdoll with realistic joint limits. The player can also ragdoll on demand and gets back up after 4 seconds.
 - **Camera:** an orbit camera that pulls in instead of clipping through walls. When you're driving and leave the mouse alone, it swings back behind the car.
-- **Display:** vehicle names and speed while driving, plus a pause screen styled like an in-game phone with all control hints.
+- **Display:** vehicle names in the bottom-left and a responsive speedometer/tachometer cluster while driving. Each model has its own name treatment, accent, gauge scale, tick layout and redline. The phone pause screen includes all control hints.
+- **Driving character:** a scaled procedural driver appears in the cabin; the arm pose follows actual steering input. Enter/exit uses a short positional transition and brakes to a stop before exit. The Sprinter's imported four-door animation is played; the other models do not contain door clips or rigs.
 
 ---
 
@@ -271,6 +273,7 @@ gta-portharcourt/
 │   ├── player.gd          # Player movement, entering cars, ragdoll and getting back up
 │   ├── car.gd             # VehicleBody3D car, controls, hitting pedestrians
 │   ├── vehicle_model.gd   # Loads/scales models and separates wheel geometry
+│   ├── vehicle_hud.gd     # Vehicle-specific bottom driving gauges and nameplates
 │   ├── touch_controls.gd  # Mobile joystick, look drag and action buttons
 │   ├── phone_menu.gd      # Pause phone continues to receive input while paused
 │   └── quality.gd        # Low / Medium / High graphics presets
@@ -289,6 +292,8 @@ gta-portharcourt/
 │   ├── touch_controls_test.gd # Fake screen touches check action press/release
 │   ├── phone_menu_test.gd  # Pause, Back/Esc, and resume flow
 │   ├── view_vehicle.gd    # Renders vehicle side/top views for measuring new models
+│   ├── view_vehicle_hud.gd # Captures four example instrument clusters
+│   ├── view_driver.gd     # Captures the driver; pass `sprinter` to view its doors
 │   └── vehicle_tires_test.gd # Audits all real and mobile tire meshes
 └── README.md
 ```
@@ -369,7 +374,14 @@ To add a vehicle:
    `"lexus_es": {"length": 4.9, "yaw": 0, "wheels": [1.45, -1.40, 0.34, 0.34], "mass": 1600},`
    then add `"lexus_es"` to `CAR_MODELS` in `scripts/main.gd`.
 5. **Check the cut**: `godot --path . --script tests/view_vehicle.gd -- car lexus_es` draws the separated wheels in magenta. If bits of tyre stay black, raise the radius a little; for twin rear tyres (trucks, buses) raise `"width"`.
-6. **Credit the author** in `assets/models/cars/real/CREDITS.md` if the license is CC BY.
+6. **Add its dashboard style** to `STYLES` in `scripts/vehicle_hud.gd`: display name, typography, accent, speed range, RPM range, redline and gauge design.
+7. **Credit the author** in `assets/models/cars/real/CREDITS.md` if the license is CC BY.
+
+### Vehicle HUD and driver
+
+The cluster is built in `scripts/vehicle_hud.gd` and follows the current vehicle. Speed comes from `linear_velocity`. RPM is an explicitly approximate, smoothed estimate based on speed and throttle because `car.gd` does not simulate engine or gearbox internals. Each model supplies its own font preference (with system fallback), name treatment, accent, gauge scale, tick layout and redline.
+
+The driver is a scaled copy of the procedural character, parented to the car. Arm pivots respond to the same steering value used by keyboard and touch input. Entering moves the player to the driver's side and seat; exiting brakes until the car is nearly stopped, then moves them clear. Of the 10 imported assets, only the Sprinter includes door transform animation tracks. Its clip is reused in both directions; the others use the character transition because their models have no door rig or clip.
 
 **Texture import:** set each model's textures to *VRAM Compressed* (select the extracted `.png` files in Godot's FileSystem dock → Import tab → Compress Mode → VRAM Compressed → Reimport). The default (lossless) made the cars take 20 seconds to load instead of under one.
 
@@ -407,6 +419,9 @@ The tire audit checks that all four wheel meshes exist, retain usable geometry a
 
 ```bash
 godot --path . --script tests/view_vehicle.gd -- car camry town_bus coach
+godot --path . --script tests/view_vehicle_hud.gd
+godot --path . --script tests/view_driver.gd
+godot --path . --script tests/view_driver.gd -- sprinter
 ```
 
 Expected output:
@@ -416,8 +431,10 @@ cars: 13  car y: 0.0
 ragdoll pelvis y after 1.5s: 0.14  ragdolls: 1
 player back up: true  ragdolls: 0
 driving: true
+driver steering pose: true
 car speed km/h: 49  upright: true
 pedestrian ragdolled: true  ped freed: true
+safe exit after braking: true
 ```
 
 Any line containing `ERROR` or `SCRIPT ERROR` means something is broken.

@@ -72,6 +72,13 @@ func _run() -> void:
 				var expected_z: float = expected_axles[0] if i < 2 else expected_axles[1]
 				if absf(wheels[i]["center"].z - expected_z) > 0.01:
 					failures.append("%s/%s wheel %d: axle misplaced at z=%.3f (expected %.3f)" % [asset_dir.get_file(), key, i, wheels[i]["center"].z, expected_z])
+				var expected_side := 1.0 if i % 2 == 0 else -1.0
+				if wheels[i]["center"].x * expected_side <= 0.0:
+					failures.append("%s/%s wheel %d: side placement has the wrong sign" % [asset_dir.get_file(), key, i])
+				if absf(wheels[i]["center"].y - expected_radius) > 0.01:
+					failures.append("%s/%s wheel %d: hub height does not match configured radius" % [asset_dir.get_file(), key, i])
+				if bool(wheels[i]["front"]) != (i < 2):
+					failures.append("%s/%s wheel %d: steering axle classification is wrong" % [asset_dir.get_file(), key, i])
 	if failures.is_empty():
 		print("Vehicle tire audit passed for all 10 models in both asset sets.")
 		quit(0)

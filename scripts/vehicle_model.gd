@@ -84,6 +84,10 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 	var body_min := Vector3.INF
 	var body_max := -Vector3.INF
 	for m: MeshInstance3D in meshes:
+		# Sprinter doors have a real imported animation and are kept in the
+		# hierarchy for the vehicle rig instead of being baked into the body.
+		if key == "sprinter" and _has_named_ancestor(m, model, "porte"):
+			continue
 		var xf := to_car * _chain(m, model)
 		for si in m.mesh.get_surface_count():
 			if m.mesh.surface_get_primitive_type(si) != Mesh.PRIMITIVE_TRIANGLES:
@@ -166,7 +170,8 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 	var wheels := []
 	for i in 4:
 		wheels.append({"center": hubs[i], "radius": radius, "front": i < 2, "parts": wheel_parts[i]})
-	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"])}
+	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"]),
+		"source_path": model_path, "source_transform": to_car}
 	_cache[model_path] = result
 	return result
 
@@ -189,6 +194,14 @@ static func _chain(n: Node3D, root: Node3D) -> Transform3D:
 		t = n.transform * t
 		n = n.get_parent()
 	return t
+
+
+static func _has_named_ancestor(n: Node, root: Node, token: String) -> bool:
+	while n != root:
+		if token in str(n.name).to_lower():
+			return true
+		n = n.get_parent()
+	return false
 
 
 static func _material(m: MeshInstance3D, surface: int) -> Material:

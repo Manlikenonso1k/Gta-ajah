@@ -13,12 +13,22 @@ const REST_LENGTH := 0.2
 const BASE_MASS := 1200.0
 
 const VehicleModel = preload("res://scripts/vehicle_model.gd")
+const Ragdoll = preload("res://scripts/ragdoll.gd")
 
 ## Key into VehicleModel.MODELS
 var model := "corolla"
 var driver: Node = null
+## Approximate engine speed for the HUD; this prototype has no gearbox model.
+var estimated_rpm := 850.0
 var _half_width := 0.9
 var _heft := 1.0
+var _exit_pending := false
+var _driver_visual: Node3D
+var _driver_limbs := {}
+var _driver_seat := Vector3(0.2, 0.85, 0.35)
+var _door_rig: Node3D
+var _door_animation: AnimationPlayer
+var _door_clip := ""
 
 
 func _ready() -> void:
@@ -33,12 +43,14 @@ func _ready() -> void:
 
 	for part in data["body"]:
 		add_child(_mesh_instance(part))
+	_setup_door_rig(data)
 
 	# Collision box follows the body, raised a little so it doesn't scrape the
 	# road. Some models have stray geometry below the tyres; ignore it.
 	var aabb: AABB = data["body_aabb"]
 	var bottom := maxf(aabb.position.y, 0.0) + 0.15
 	_half_width = aabb.size.x / 2
+	_driver_seat = Vector3(0.22, clampf(aabb.position.y + 0.1, 0.3, 0.5), 0.35)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(aabb.size.x, aabb.end.y - bottom, aabb.size.z)
@@ -80,6 +92,72 @@ func _ready() -> void:
 
 func start_driving(new_driver: Node) -> void:
 	driver = new_driver
+	_exit_pending = false
+	_driver_visual = Node3D.new()
+	_driver_visual.position = _driver_seat
+	_driver_visual.scale = Vector3.ONE * 0.55
+	_driver_visual.rotation.y = PI
+	add_child(_driver_visual)
+	_driver_limbs = Ragdoll.build_visual(_driver_visual, new_driver.colors)
+	Ragdoll.animate_driver(_driver_limbs, 0.0)
+
+
+func driver_door_point() -> Vector3:
+	return Vector3(_half_width + 0.62, 0.0, _driver_seat.z * 0.5)
+
+
+func driver_seat_point() -> Vector3:
+	return _driver_seat
+
+
+func animate_driver_door(open: bool) -> void:
+	if _door_animation == null or _door_clip.is_empty():
+		return
+	_door_animation.speed_scale = 3.5
+	if open:
+		_door_animation.play(_door_clip)
+	else:
+		_door_animation.play(_door_clip, -1.0, -1.0, true)
+	await _door_animation.animation_finished
+
+
+func finish_driver_exit() -> void:
+	if is_instance_valid(_driver_visual):
+		_driver_visual.queue_free()
+	_driver_visual = null
+	_driver_limbs.clear()
+
+
+func _setup_door_rig(data: Dictionary) -> void:
+	# Only the Sprinter asset has a real door clip. Keep its imported hierarchy
+	# as an invisible rig and show just the animated door meshes over the cut body.
+	var packed: PackedScene = load(data["source_path"])
+	var rig: Node3D = packed.instantiate()
+	rig.transform = data["source_transform"]
+	var stack: Array[Node] = [rig]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node is AnimationPlayer:
+			var clips: PackedStringArray = node.get_animation_list()
+			if not clips.is_empty():
+				_door_animation = node
+				_door_clip = clips[0]
+		if node is MeshInstance3D:
+			var ancestor: Node = node
+			var is_door := false
+			while ancestor != rig:
+				if "porte" in str(ancestor.name).to_lower():
+					is_door = true
+					break
+				ancestor = ancestor.get_parent()
+			node.visible = is_door
+		for child in node.get_children():
+			stack.append(child)
+	if _door_animation == null:
+		rig.free()
+		return
+	_door_rig = rig
+	add_child(_door_rig)
 
 
 func _physics_process(delta: float) -> void:
@@ -87,6 +165,7 @@ func _physics_process(delta: float) -> void:
 		engine_force = 0.0
 		steering = 0.0
 		brake = 5.0 * _heft
+		estimated_rpm = move_toward(estimated_rpm, 850.0, 1800.0 * delta)
 		return
 
 	var speed := linear_velocity.length()
@@ -94,6 +173,11 @@ func _physics_process(delta: float) -> void:
 	var throttle := Input.get_axis("move_back", "move_forward")
 	var steer_target := Input.get_axis("move_right", "move_left") * lerpf(MAX_STEER, 0.2, clampf(speed / 30.0, 0, 1))
 	steering = move_toward(steering, steer_target, 2.0 * delta)
+	var speed_ratio := clampf(speed / TOP_SPEED, 0.0, 1.0)
+	var rpm_target := 850.0 + speed_ratio * 4600.0 + maxf(throttle, 0.0) * 1500.0 * (1.0 - speed_ratio * 0.65)
+	estimated_rpm = lerpf(estimated_rpm, rpm_target, 1.0 - exp(-4.0 * delta))
+	if not _driver_limbs.is_empty():
+		Ragdoll.animate_driver(_driver_limbs, steering)
 
 	engine_force = 0.0
 	brake = 1.0 * _heft
@@ -110,11 +194,16 @@ func _physics_process(delta: float) -> void:
 			brake = 0.0
 
 	if Input.is_action_just_pressed("interact"):
-		# Driver gets out on the left (+X when facing +Z)
-		var exit_pos := global_position + global_basis.x * (_half_width + 0.8) + Vector3.UP * 0.3
-		var leaving := driver
-		driver = null
-		leaving.exit_car(exit_pos)
+		_exit_pending = true
+	if _exit_pending:
+		engine_force = 0.0
+		brake = BRAKE * _heft
+		if speed <= 0.8:
+			_exit_pending = false
+			var exit_pos := global_position + global_basis.x * (_half_width + 0.8) + Vector3.UP * 0.15
+			var leaving: Node = driver
+			driver = null
+			leaving.begin_exit_car(self, exit_pos)
 
 
 func _on_bumper_body_entered(body: Node3D) -> void:
