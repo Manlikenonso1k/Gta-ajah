@@ -20,3 +20,6 @@ assets/models/cars/mobile/*_Image_*.jpg
 
 # Mixamo clips: Adobe terms forbid redistributing the files in a public repo
 assets/animations/mixamo/
+# Libraries built from the Mixamo clips (same licence limits as the clips)
+assets/animations/mixamo_*.res
+assets/animations/mixamo_*.tres

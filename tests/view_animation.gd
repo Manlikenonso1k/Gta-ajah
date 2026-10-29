@@ -8,12 +8,15 @@ extends SceneTree
 ## A pedestrian on the shared library, through locomotion.gd (state:speed):
 ##   godot --path . --script tests/view_animation.gd -- PED_BA_M01 idle:0,walk:1.4,jog:2.6,run:4.5
 ##   godot --path . --script tests/view_animation.gd -- PED_BA_M01 clip:GetUp,clip:Driving
+##   godot --path . --script tests/view_animation.gd -- PED_BA_F03 walk:1.3,sit:0,lie:0
+## Each pedestrian uses its own clip set (scripts/animation_sets.gd).
 ## Add "front" as a third argument for a front view. The character walks on
 ## the spot (foot sliding is measured by tests/pedestrian_models_test.gd).
 ## Images go to user://animation_views/.
 
 const Registry = preload("res://scripts/pedestrian_registry.gd")
 const Locomotion = preload("res://scripts/locomotion.gd")
+const AnimationSets = preload("res://scripts/animation_sets.gd")
 const FRAMES := 12
 const CELL := Vector2i(160, 240)
 
@@ -95,7 +98,8 @@ func _pedestrian_sheet(id: String, rows: PackedStringArray, stage: Node3D) -> Im
 		stage.add_child(model)
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 1
-		var loco = Locomotion.create(model, {"idle": "Idle"}, rng)
+		var clips := AnimationSets.pick(id, entry.get("gender", ""), entry.get("tags", []))
+		var loco = Locomotion.create(model, clips, rng)
 		if loco == null:
 			push_error("%s has no standard skeleton or the library is missing" % id)
 			return null
@@ -110,8 +114,8 @@ func _pedestrian_sheet(id: String, rows: PackedStringArray, stage: Node3D) -> Im
 				loco.advance(1.0 / 30.0)
 			if speed > 0.1:
 				var gait: String = "walk" if loco._gait <= 1.5 else ("jog" if loco._gait <= 2.5 else "sprint")
-				cycle = Locomotion.library().get_animation(loco._clips[gait]).length / loco._time_scale()
-			print("%s %s: gait %.2f scale %.2f natural %s" % [id, rows[row], loco._gait, loco._time_scale(), loco.natural])
+				cycle = Locomotion.clip(loco._clips[gait]).length / loco._time_scale()
+			print("%s %s: gait %.2f scale %.2f natural %s | %s" % [id, rows[row], loco._gait, loco._time_scale(), loco.natural, loco.summary()])
 		for f in FRAMES:
 			await _grab(sheet, f, row)
 			loco.advance(cycle / FRAMES)

@@ -61,14 +61,14 @@ func _run() -> void:
 	Input.action_press("move_left")
 	await _frames(20)
 	var left_steer := car.steering
-	var left_arm: float = car._driver_limbs["arm_l"].rotation.z
+	var left_arm := _steer_pose(car)
 	Input.action_release("move_left")
 	Input.action_press("move_right")
 	await _frames(20)
 	var right_steer := car.steering
-	var right_arm: float = car._driver_limbs["arm_l"].rotation.z
+	var right_arm := _steer_pose(car)
 	Input.action_release("move_right")
-	print("driver steering pose: ", left_steer > 0.05 and right_steer < -0.05 and left_arm < right_arm)
+	print("driver steering pose: ", left_steer > 0.05 and right_steer < -0.05 and absf(left_arm - right_arm) > 0.1)
 	# Reset any turn drift so this collision check is on a straight, known path.
 	car.steering = 0.0
 	car.linear_velocity = Vector3.ZERO
@@ -111,3 +111,12 @@ func _run() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(VehiclePersistence.SAVE_PATH))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(VehiclePersistence.TEMP_PATH))
 	quit()
+
+
+## How the driver's steering shows: the rim angle the seated driver's hands
+## follow, or the stick driver's arm swing when no realistic driver is seated.
+func _steer_pose(car: Node) -> float:
+	var occupants: Node = car.get("occupants")
+	if occupants != null and occupants.player_seated:
+		return occupants.wheel_angle
+	return car._driver_limbs["arm_l"].rotation.z

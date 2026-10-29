@@ -1,0 +1,131 @@
+{
+ "_doc": "Which clips each kind of character may use, read by scripts/animation_sets.gd. Kinds come from the registry's gender and age tags (an 'elder' tag makes elder_<gender>). Each pedestrian picks one clip per slot, seeded by its stable ID. 'mx/' clips are in the git-ignored Mixamo library (assets/animations/mixamo_library.res); the others are in the CC0 Quaternius library. Clips missing from the libraries are skipped, and an empty slot falls back to 'fallback'. 'clip_sex' lists the clips only one sex may use. A clip listed twice is picked twice as often.",
+ "slots": [
+  "idle",
+  "walk",
+  "jog",
+  "sprint",
+  "sit",
+  "lie"
+ ],
+ "clip_sex": {
+  "mx/Walk_F": "female",
+  "mx/Sit_F": "female",
+  "mx/Lie_F": "female",
+  "mx/Walk_M": "male",
+  "mx/Run_M": "male",
+  "mx/Lie_M": "male"
+ },
+ "sets": {
+  "male": {
+   "idle": [
+    "mx/Idle_Stand",
+    "mx/Idle_Stand",
+    "mx/Idle_Phone"
+   ],
+   "walk": [
+    "mx/Walk_M",
+    "mx/Walk"
+   ],
+   "jog": [
+    "mx/Jog"
+   ],
+   "sprint": [
+    "mx/Run_M",
+    "mx/Run"
+   ],
+   "sit": [
+    "mx/Sit_Talk",
+    "mx/Sit_Laugh"
+   ],
+   "lie": [
+    "mx/Lie_M"
+   ]
+  },
+  "female": {
+   "idle": [
+    "mx/Idle_Stand",
+    "mx/Idle_Stand",
+    "mx/Idle_Phone"
+   ],
+   "walk": [
+    "mx/Walk_F"
+   ],
+   "jog": [
+    "mx/Jog"
+   ],
+   "sprint": [
+    "mx/Run"
+   ],
+   "sit": [
+    "mx/Sit_F",
+    "mx/Sit_Talk"
+   ],
+   "lie": [
+    "mx/Lie_F"
+   ]
+  },
+  "elder_male": {
+   "idle": [
+    "mx/Idle_Stand"
+   ],
+   "walk": [
+    "Walk_Slow"
+   ],
+   "jog": [
+    "mx/Jog"
+   ],
+   "sprint": [
+    "mx/Jog"
+   ],
+   "sit": [
+    "mx/Sit_Talk"
+   ],
+   "lie": [
+    "mx/Lie_M"
+   ]
+  },
+  "elder_female": {
+   "idle": [
+    "mx/Idle_Stand"
+   ],
+   "walk": [
+    "Walk_Slow"
+   ],
+   "jog": [
+    "mx/Jog"
+   ],
+   "sprint": [
+    "mx/Jog"
+   ],
+   "sit": [
+    "mx/Sit_F",
+    "mx/Sit_Talk"
+   ],
+   "lie": [
+    "mx/Lie_F"
+   ]
+  }
+ },
+ "fallback": {
+  "idle": [
+   "Idle",
+   "Idle_Talking",
+   "Idle_FoldArms",
+   "Idle_Phone"
+  ],
+  "walk": [
+   "Walk"
+  ],
+  "jog": [
+   "Jog"
+  ],
+  "sprint": [
+   "Sprint"
+  ],
+  "sit": [
+   "Sit_Idle"
+  ],
+  "lie": []
+ }
+}

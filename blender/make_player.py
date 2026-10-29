@@ -232,6 +232,9 @@ def build():
         json.dump({
             "id": entry["id"],
             "display_name": entry["name"],
+            # Picks the clip set (assets/animations/animation_sets.json)
+            "gender": "male" if entry["gender"] >= 0.5 else "female",
+            "tags": ["young"],
             "description": entry["description"],
             "model_path": "res://assets/characters/player/player.glb",
             "body_height_m": round(measured, 3),

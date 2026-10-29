@@ -22,6 +22,8 @@ const MODE_NAMES := ["walk", "pause", "kerb", "cross", "flee"]
 ## Keep to the right of the walking line; shift further right to pass someone
 const KEEP_RIGHT := 0.45
 const PASS_SHIFT := 0.5
+## Sideways part of the direction (about 30°) when passing someone on a crossing
+const CROSS_PASS := 0.6
 const THINK_INTERVAL := 0.25
 const DESTINATION_RANGE := 110.0
 
@@ -49,6 +51,9 @@ var _shift_target := 0.0
 var _cross_from := Vector3.ZERO
 var _cross_to := Vector3.ZERO
 var _cross_threat := false
+## While crossing: steer this much to the side (+ right, - left) to pass a
+## slower person directly ahead on the same line
+var _cross_pass := 0.0
 var _kerb_waited := 0.0
 var _look_side := 1.0
 var _look_timer := 0.0
@@ -265,6 +270,7 @@ func _kerb(delta: float, thinking: bool) -> Vector3:
 		var patient := _kerb_waited < 15.0
 		if arrival > cross_time + 2.0 or (not patient and arrival > 3.0):
 			mode = Mode.CROSS
+			_cross_pass = 0.0
 	return Vector3.ZERO
 
 
@@ -284,6 +290,9 @@ func _cross() -> Vector3:
 		mode = Mode.WALK
 		_reach_node(_path[_index])
 		return Vector3.ZERO
+	var direction := to_far.normalized()
+	if _cross_pass != 0.0:
+		direction = (direction + Vector3(-direction.z, 0.0, direction.x) * _cross_pass).normalized()
 	var speed := _planned_cross_speed()
 	if _cross_threat:
 		match crossing_style:
@@ -293,7 +302,7 @@ func _cross() -> Vector3:
 				speed = run_speed
 			_:
 				speed = run_speed * 1.2
-	return to_far.normalized() * speed
+	return direction * speed
 
 
 ## Seconds until the first moving car reaches the crossing; INF when clear.
@@ -335,6 +344,7 @@ func _scan() -> void:
 		_cross_threat = _earliest_arrival(p, _cross_to) < 2.5 or _earliest_arrival(p, p + facing) < 2.5
 		if crossing_style == "walk_then_run" and _cross_threat:
 			crossing_style = "run"
+		_cross_pass = _passing_side(p)
 		return
 	if mode != Mode.FLEE:
 		for car: Node3D in ped.get_tree().get_nodes_in_group("cars"):
@@ -367,6 +377,22 @@ func _scan() -> void:
 			if rel.length_squared() < 2.6 * 2.6 and rel.dot(facing) > 0.2:
 				_shift_target = PASS_SHIFT
 				break
+
+
+## Sideways steer for crossing: 0 when nobody is close ahead on this line,
+## otherwise a turn away from the side the person ahead is on.
+func _passing_side(p: Vector3) -> float:
+	var right := Vector3(-facing.z, 0.0, facing.x)
+	for other: Node3D in ped.get_tree().get_nodes_in_group("pedestrians"):
+		if other == ped:
+			continue
+		var rel := other.global_position - p
+		rel.y = 0.0
+		var ahead := rel.dot(facing)
+		var aside := rel.dot(right)
+		if ahead > 0.0 and ahead < 1.8 and absf(aside) < 0.7:
+			return -CROSS_PASS if aside > 0.0 else CROSS_PASS
+	return 0.0
 
 
 ## Something (a palm, a parked car, a person standing still) is in the way:

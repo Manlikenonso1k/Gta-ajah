@@ -1,103 +1,142 @@
-# Team lead: run Tasks 1–4 as an agent team
+# Task 5: street life, crash drama, danfos and new places
 
-You are the team lead. Your teammates build; you plan, coordinate, commit and keep README current. Don't implement features yourself. Wait for teammates to finish their tasks.
+Plan first, then build it phase by phase.
 
-The four task specs are in root:
+## What I want
 
-- `prompt-1-realistic-ragdoll.md`
-- `prompt-2-natural-animation.md`
-- `prompt-3-traffic-and-pavements.md`
-- `prompt-4-player-and-drivers.md`
+The game should feel like a real Nigerian street: busy, packed together and dramatic. I've downloaded Mixamo animations into `assets/animations/mixamo/` (for example `Angry.fbx` and `Block.fbx`; list the folder for the full set). They include lying, sitting and walking clips, with male and female versions, plus reactions. Use them on the player and the pedestrians wherever they fit. You choose which clip goes where.
 
-Before spawning anyone, read README.md (especially the Progress log), all four specs, and the scripts they mention.
+1. **People move like people:** real clips for idle, walk, run, sit and lie down instead of the procedural walk, matched to each character (female clips on women, elder clips on older people).
+2. **The under-bridge:** a flyover with space beneath it where homeless people live. Some sleep lying on mats or cardboard, some sit against the pillars, a few walk around. Add belongings: bags, buckets, a small fire or lamp.
+3. **Crash drama:** when a car crashes into another car or a building, or hits a person, nearby people react the way they would in Nigeria. They shout, put their hands on their heads, point, run to the scene and crowd around it. If someone is killed, people gather around the body, some kneel or cry, and some angrily walk up to the car, shout at the driver and block it. The crowd breaks up after a while.
+4. **Danfos:**
+   - The sliding door slides open, then stays open while driving, as in Nigeria.
+   - A conductor always hangs in the doorway, holding the roof with one hand and leaning out.
+   - Seats are packed tight: the driver plus 2 passengers in front, then 3 rows of 4 behind.
+5. **New places:**
+   - A **suya kiosk**: grill, smoke, a seller turning the meat, and customers waiting or eating standing up.
+   - A **supermarket**: people going in and out, some carrying bags.
+   - A **medical point**: a proper clinic building, with people waiting outside on a bench.
+   - Around these, other buildings, stalls and kiosks can be packed close together and partly hidden behind each other, like a congested street. Not everything needs an interior or to be fully visible.
 
-## Teammates
+## How to work
 
-Spawn five teammates with these exact names:
+- **Read first:** the Progress log in README.md, then the scripts each phase touches. Tasks 1–4 (realistic ragdoll, animations, traffic, player model and drivers) may be partly done. Check the log and reuse whatever exists; don't redo it.
+- **Phase 0, plan:** write `docs/PLAN_street_life.md`, keeping it short. It should contain:
+  - a table of every clip in the mixamo folder: file, what it shows, male/female/any, looping or one-shot, and where you'll use it (or "skip" and why)
+  - where each new place goes in the city
+  - the performance budget per phase
+  - anything you can't do, and why
 
-| Name | Job |
-|---|---|
-| `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll |
-| `animator` | Task 2: animation clips and natural movement |
-| `traffic` | Task 3: road traffic, pavements and crossings |
-| `vehicles` | Task 4 steps 1–2 now (player model, steering wheels and seat measurements); steps 3–5 in Phase 2 |
-| `qa` | Tests and checks everyone's work. Never edits game code |
-
-Give each builder a spawn prompt that says: read README.md and your task spec in `prompts/`, follow its Rules section with the changes listed under "Rules for every teammate" below, and only edit the files you own.
+  Then go straight into Phase 1. Only stop to ask me about decisions that are mine (how something should look).
+- **One phase per session:** after each phase, commit, add 3–4 lines to the Progress log saying what's done and what's next, then stop. I'll start a fresh session with "continue with the next phase in docs/PLAN_street_life.md".
 
 ## Phases
 
-### Phase 1: everyone starts now
+### Phase 1: animation clips on pedestrians and the player
 
-- **ragdoll:** Task 1 step 1 (one standard skeleton) first. It should be small, and other work depends on it. As soon as it's done, message everyone the standard bone names, then continue with the rest of Task 1.
-- **animator:** Task 2 step 1 research right away: find, licence-check and download the clips. Retargeting waits until `ragdoll` sends the bone names (make it a dependent task). Then continue with Task 2.
-- **traffic:** all of Task 3. It doesn't depend on the skeleton.
-- **vehicles:** Task 4 step 1 (generate the player model with MPFB; don't wire it into `player.gd` yet) and step 2 (seat and steering-wheel measurements, cutting the steering wheels into separate meshes).
-- **qa:** before anyone changes code, run the full test suite and the performance profile on High and Low, and record the baseline in `docs/QA_REPORT.md`. Then review each task as it's reported done.
+- **Import:**
+  - If the clips aren't imported yet, write one script that imports every FBX in `assets/animations/mixamo/` as an Animation Library.
+  - Retarget them with a BoneMap on `SkeletonProfileHumanoid`. The MPFB characters already use `mixamorig:` bone names; the Renderpeople and other downloaded models need their own bone maps.
+  - Set looping clips to loop.
+  - Check each file: some may include a character body ("with skin"), and walks may move forward instead of staying in place. Strip the root motion from locomotion clips so the game moves the character, not the clip.
+- **Who gets what:**
+  - Write `assets/animations/animation_sets.json`, which says which clips each kind of character may use, based on the gender and age tags in `pedestrian_registry.gd`. Add any missing tags.
+  - Each pedestrian picks its clips once, seeded by its stable ID.
+  - Show the chosen clips in the F4 inspector.
+- **Playback:**
+  - Give each pedestrian an AnimationTree that blends idle → walk → run by speed, with playback speed matched to ground speed so feet don't slide.
+  - Start each one at a random point in the cycle.
+  - Add `set_locomotion(speed, state)` as the one function movement code calls.
+  - Keep `humanoid_walk.gd` as the fallback, and print a warning when a model can't use the clips.
+- **Player:**
+  - If the player is still the stick figure, give him one of the existing MPFB characters for now. Set this in one place so I can swap the model later.
+  - Use the same clips on him. Keep `player.gd` controls, speeds and collision capsule exactly as they are.
 
-### Phase 2: after `ragdoll`, `animator` and `vehicles` are approved by `qa`
+### Phase 2: the under-bridge and the new places
 
-- **vehicles:** Task 4 steps 3–5: hands on the wheel, the realistic player wired into `player.gd` with the new ragdoll and animations, and drivers and passengers in moving traffic cars. If `traffic` is still working, agree with it how traffic cars are spawned before adding drivers.
-- Transfer ownership of files from teammates who have finished to whoever needs them, and record the change in README.
+- **How to build them:**
+  - Model them as low-poly Blender scripts in `blender/`, exported to `assets/models/buildings/`, and list each one in an asset manifest.
+  - Place them in `city.gd`. The bridge is a flyover over one of the roads; traffic must still drive under it.
+- **Under-bridge:**
+  - Homeless people use fixed lying and sitting clips. They're cheap, with no navigation.
+  - A few walk short loops around the pillars.
+- **Suya kiosk:** smoke from `CPUParticles3D` (safe on the Compatibility renderer), a seller with a working loop, and 2–4 customers standing around.
+- **Supermarket:**
+  - Use a made-up name and sign; no real brands.
+  - Pedestrians sometimes walk in through the door, and others walk out carrying a bag.
+- **Medical point:**
+  - Use a green cross or a "+" sign, not a red cross. The red cross emblem is legally protected.
+  - People sit waiting on a bench outside.
+- **Congestion:** pack stalls, umbrellas, kiosks and buildings close together around the market and clinic area. Pedestrians must still be able to walk through.
 
-## Interfaces teammates must agree early
+### Phase 3: danfos
 
-Teammates message each other to settle these in their first few minutes, even before they're built. Record each agreed interface in a README section called "Interfaces between tasks".
+The danfo is `vw_t3`. Do it first; if that works, do the same for the `hiace`, which also has a sliding door.
 
-- **ragdoll → everyone:** the standard bone names, and the function that starts a ragdoll (for example `start_ragdoll(impact_velocity, impact_point, vehicle_mass)`).
-- **animator → traffic:** the locomotion function (for example `set_locomotion(speed, state)`) and its states, so `traffic` can call it before it exists.
-- **vehicles → Phase 2:** the format of seat and steering-wheel data in `assets/models/cars/vehicles.json`.
-- **traffic → Phase 2:** how traffic cars are spawned and driven, so drivers can be added.
+- **Sliding door:**
+  - The sliding door is on the right-hand side, the kerb side when driving on the right. Cut its triangles out of the body mesh, the same way `vehicle_model.gd` separates the wheels.
+  - Animate it sliding back along the body. It's open by default and stays open while driving.
+  - If the door can't be cut out cleanly, show me images and ask before building a replacement panel.
+- **Seats:**
+  - Add simple bench seats: driver plus 2 front passengers, then 3 rows of 4.
+  - Store the seat positions per model in `assets/models/cars/vehicles.json`.
+  - Seats are meant to be tight; shoulders can touch, but no limbs through bodies or through the van walls. Keep the doorway clear for the conductor.
+- **Passengers:**
+  - Moving traffic danfos are 60–100% full, using sitting clips that match each person.
+  - Parked danfos keep their door open and have no passengers.
+- **Conductor:**
+  - He hangs in the doorway on moving danfos, one foot on the step and one hand on the roof, leaning out and swaying with braking and turns.
+  - When the danfo stops, he steps down beside the door, then climbs back on before it moves off.
+- **Player takes a danfo:** if anyone is in it, they climb out, and the driver and conductor shout at the player (use `Angry`) before walking away.
 
-## File ownership
+### Phase 4: crash drama
 
-Teammates share one working folder, and two teammates editing the same file overwrite each other. Start from this table, adjust it after reading the code, and write the final version in README before spawning anyone.
+- **Detecting crashes:**
+  - Add one crash event that fires when any car (player or traffic) hits another car, a building or a person above a speed threshold.
+  - Pass in where it happened, how bad it was, and whether someone died.
+- **Reactions:**
+  - **Within about 8 m:** people flinch and back away, and put their hands on their heads.
+  - **8–30 m:** some run to the scene and stand in a loose crowd around it. Others just look and point.
+  - **A death:** people gather close around the body; some kneel or cry. A few angry people walk to the car, shout at the driver and stand in front of it (use `Angry` and `Block`). If the driver drives off, they shout after the car, and one or two chase it a short way.
+  - **Traffic:** traffic near a crowd slows and stops.
+- **Ending:** after 30–60 s, the crowd slowly drifts back to normal walking.
+- **Limits:**
+  - Cap how many people react at once: 12 on High, 6 on Low.
+  - People beyond 30 m don't react.
 
-| Owner | Files |
-|---|---|
-| `ragdoll` | `scripts/ragdoll.gd`, new skeleton/ragdoll scripts, the characters' `.glb.import` files, `tests/ragdoll_models_test.gd`, `tests/view_ragdoll.gd` |
-| `animator` | `scripts/pedestrian.gd`, `scripts/humanoid_walk.gd`, `scripts/pedestrian_registry.gd`, new animation scripts, `assets/animations/`, `tests/pedestrian_models_test.gd` |
-| `traffic` | `scripts/city.gd`, `scripts/traffic.gd`, `scripts/car.gd`, new road, pavement and pedestrian-navigation scripts, `tests/world_systems_test.gd` |
-| `vehicles` | `scripts/vehicle_model.gd`, `assets/models/cars/vehicles.json`, the player's Blender script and `assets/characters/player/`, `tests/view_vehicle.gd`, `tests/view_driver.gd` |
-| `qa` | new `tests/qa_*.gd` files and `docs/QA_REPORT.md` only |
-| lead | `scripts/main.gd`, `scripts/player.gd`, `README.md`, `.gitignore`, `project.godot`, and any file not listed |
+### Phase 5: final check
 
-Examples of cross-file work: `ragdoll` needs the car-hit code in `car.gd` to call its ragdoll function, so it messages `traffic` with the exact change. `traffic` puts pedestrian navigation in a new script and asks `animator` to call it from `pedestrian.gd`.
+- Run the full test suite and the performance profile on High and Low.
+- List the images I should look at.
 
-## Rules for every teammate
+## Rules
 
-Add these to every spawn prompt. They replace the matching parts of each task spec's Rules section.
-
-- **Don't commit.** The lead commits. **Don't edit README.** Send your Progress-log update to the lead instead.
-- **Only edit files you own.** To change another file, message its owner with exactly what you need.
-- **Never run `git checkout`, `git reset`, `git stash`, `git clean` or `git rebase`, and never delete files you didn't create.** Other teammates' unfinished work is in the same folder.
-- **Run Godot and Blender only through `tools/locked.sh`**, for example `tools/locked.sh godot --headless --path . --script tests/x.gd`. They share Godot's import cache, and this computer can't run several at once. Keep each run short: run only your own tests while iterating and leave the full suite to `qa`.
-- **When you finish a task,** mark it done and message `qa` with what changed, which files, which tests to run and which images to look at.
-
-## QA's job
-
-- Whenever a teammate reports a task done, run the **whole** test suite (not only theirs), the performance profile on High and Low, and look at the rendered images. Check the licence and credits of any newly downloaded asset.
-- **Pass:** message the lead `approved: <task>` with the test results and profile numbers.
-- **Fail:** message the owner with the failing test, or what looks wrong and in which image, and create a fix task for them.
-- Keep `docs/QA_REPORT.md` current: what was tested, results, open bugs.
-
-## Your loop as lead
-
-1. **Set up:** create `tools/locked.sh` (below) and make it executable, add `.tool_lock` to `.gitignore`, write the ownership table and the empty "Interfaces between tasks" section in README, create the shared task list with dependencies, then spawn the teammates.
-2. **While they work:** answer questions, settle interface disagreements, and stop anyone editing files they don't own.
-3. **When `qa` approves a task:** commit only that task's files (`git add` the specific files, never `git add -A`) with a clear message, and update the README Progress log from the teammate's report.
-4. **Start Phase 2** once `ragdoll`, `animator` and `vehicles` are approved.
-5. **Stop and ask me** when a decision is mine to make (how something should look or feel), when something would delete or overwrite my work, when two teammates can't agree, or when the same QA failure happens three times.
-6. **At the end:** a final full QA pass with everything together, then report what's done, what isn't, before and after performance, and the checklist of things I need to check by eye and on my phone.
-
-## `tools/locked.sh`
-
-```sh
-#!/bin/sh
-# Runs one Godot or Blender command at a time across all agents.
-# Usage: tools/locked.sh godot --headless --path . --script tests/smoke_test.gd
-# If a crash leaves a stale .tool_lock folder behind, delete it.
-until mkdir .tool_lock 2>/dev/null; do sleep 3; done
-trap 'rmdir .tool_lock' EXIT INT TERM
-"$@"
-```
+- **Proof before "done":**
+  - Don't tell me something works unless you render images and show them to me.
+  - Render with the windowed tools, like `tests/view_driver.gd`; headless runs can't capture images. If you can't render, say so plainly.
+  - Each phase needs image sequences of what it added:
+    - Phase 1: walks, sits and lies on three different characters.
+    - Phase 2: each place.
+    - Phase 3: the door opening and the full danfo from outside and inside.
+    - Phase 4: a crash scene.
+  - Look at every frame and fix limbs through bodies, sliding feet, people floating or sinking, and wrong-way joints.
+- **Tests:** before every commit, run every test listed in README → Testing; all must pass. Add tests for what you build. For example:
+  - every clip loads
+  - female-only clips are never given to men
+  - a traffic danfo seats at most 15 plus the conductor
+  - a crash event makes nearby people react, and the crowd clears afterwards
+- **Performance:** run `tests/performance_profile.gd` before Phase 1 and after each phase, and report the numbers. The Low preset must still aim for 30 fps on a mid-range phone, so:
+  - passengers, the conductor and crowd animations update fully only within about 40 m
+  - use fixed poses further out, and hide people beyond 120 m
+  - homeless people and kiosk customers use cheap looping clips with no navigation
+- **Licence:**
+  - Mixamo files can't be shared publicly, and my repo is public. Add `assets/animations/mixamo/` and any saved copies of the clips (`.res`/`.tres`) to `.gitignore`, and tell me about anything else that would put Mixamo data in the repo.
+  - Downloaded models must be CC0 or CC BY, with credits. No real brand names or logos.
+- **Engine:** Godot 4.7.2, GDScript, Compatibility renderer, Jolt physics. Check the Godot 4.7 docs when unsure; no Godot 3 or deprecated APIs.
+- **Don't change:** controls, touch controls, car handling values or the quality presets, unless this task says to.
+- **Keep it lean:** keep changes small and readable, and don't re-read files you've already read this session.
+- **Stop and ask me:**
+  - when a decision is about how something should look
+  - when something would delete or overwrite my work
+  - when the same problem fails three times

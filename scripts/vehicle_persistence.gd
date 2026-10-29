@@ -12,7 +12,10 @@ static func load_states() -> Dictionary:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	# JSON.parse() reports a damaged file through its return code; parse_string()
+	# would also print an engine error
+	var json := JSON.new()
+	var parsed: Variant = json.data if json.parse(file.get_as_text()) == OK else null
 	if not parsed is Dictionary or int(parsed.get("version", -1)) != VERSION:
 		push_warning("Vehicle save was unreadable or used an unsupported version; default spawns will be used")
 		return {}

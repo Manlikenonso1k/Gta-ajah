@@ -18,6 +18,7 @@ const Ragdoll = preload("res://scripts/ragdoll.gd")
 const RealisticRagdoll = preload("res://scripts/realistic_ragdoll.gd")
 const HumanoidWalk = preload("res://scripts/humanoid_walk.gd")
 const Locomotion = preload("res://scripts/locomotion.gd")
+const AnimationSets = preload("res://scripts/animation_sets.gd")
 const PedestrianNavigation = preload("res://scripts/pedestrian_navigation.gd")
 const PavementGraph = preload("res://scripts/pavement_graph.gd")
 const Registry = preload("res://scripts/pedestrian_registry.gd")
@@ -52,6 +53,9 @@ var character_scale := 1.0
 var collision_radius := 0.3
 var collision_height := 1.8
 var tags: Array = []
+var gender := ""
+## Clips this pedestrian uses (scripts/animation_sets.gd), picked once by ID
+var clip_set := {}
 
 ## Pavement navigation (owner: traffic). Non-null once the pavement graph is
 ## ready; world_systems_test.gd reads this property.
@@ -91,10 +95,11 @@ func _ready() -> void:
 	var visual := Node3D.new()
 	visual.name = "CharacterVisual"
 	add_child(visual)
-	if tags.is_empty():
-		var entry := Registry.by_id(character_id)
-		if not entry.is_empty():
-			tags = entry.get("tags", [])
+	var entry := Registry.by_id(character_id)
+	if tags.is_empty() and not entry.is_empty():
+		tags = entry.get("tags", [])
+	if gender == "":
+		gender = entry.get("gender", "")
 	if model_scene != null:
 		var model := model_scene.instantiate()
 		model.name = "ImportedCharacterModel"
@@ -108,8 +113,10 @@ func _ready() -> void:
 			mesh.visibility_range_end = VISIBLE_DISTANCE
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash(get_instance_id())
-		_loco = Locomotion.create(model, _clip_overrides(), rng)
+		clip_set = AnimationSets.pick(character_id, gender, tags)
+		_loco = Locomotion.create(model, clip_set, rng)
 		if _loco == null:
+			push_warning("pedestrian %s: model can't use the shared clips; using the procedural walk" % character_id)
 			# No standard skeleton: procedural swing, and silence any baked clip
 			_walker = HumanoidWalk.create(model)
 			_model_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
@@ -129,14 +136,11 @@ func _ready() -> void:
 			navigation = PedestrianNavigation.new(self)
 
 
-## Which walk clip suits this character: elders stroll, office workers walk
-## formally, everyone else uses the default walk.
-func _clip_overrides() -> Dictionary:
-	if tags.has("elder"):
-		return {"walk": "Walk_Slow"}
-	if tags.has("office") or tags.has("business_casual"):
-		return {"walk": "Walk_Formal"}
-	return {}
+## The clips in use, for the F4 inspector.
+func animation_summary() -> String:
+	if _loco != null:
+		return "%s: %s" % [clip_set.get("set", "?"), _loco.summary()]
+	return "procedural walk" if _walker != null else "stick figure"
 
 
 func _physics_process(delta: float) -> void:

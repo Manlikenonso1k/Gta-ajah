@@ -10,6 +10,12 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 This section is the handoff note between work sessions. It's kept current so a new session can pick up the work without reading the whole codebase. **Update it at the end of every step.**
 
+### Current task: Task 5, street life (`prompt-lead.md`, plan in `docs/PLAN_street_life.md`)
+
+- **Phase 1 done (2026-10-29):** pedestrians and the player play the owner's Mixamo clips (idle, walk, jog, run, sit, lie), chosen per character from `assets/animations/animation_sets.json` by gender and age tag and seeded by ID; the F4 inspector lists them. The clips and the library built from them (`tools/build_mixamo_library.sh` → `assets/animations/mixamo_library.res`) are git-ignored; without them the game uses the CC0 clips. `tests/animation_sets_test.gd` checks clips, sex limits and sit/lie heights. A crossing gap was fixed: crossing pedestrians now pass a slower person ahead instead of being stuck behind them.
+- Profile (headless, after Phase 1): High 6.89 ms avg, Low 6.90 ms avg, unchanged from before.
+- **Next: Phase 2** (under-bridge, suya kiosk, supermarket, medical point, congested stalls). Start with "continue with the next phase in docs/PLAN_street_life.md".
+
 ### Completed task: Android support
 
 Goal: playable on Android phones in landscape at a steady 30 fps on a mid-range phone (about 4 GB RAM, Mali or Adreno GPU), without changing desktop keyboard and mouse play. Commit after each step.
@@ -77,7 +83,7 @@ Specs: `prompt-1-realistic-ragdoll.md`, `prompt-2-natural-animation.md`, `prompt
 | `qa` | new `tests/qa_*.gd` files and `docs/QA_REPORT.md` only |
 | lead | `scripts/main.gd`, `scripts/player.gd`, `README.md`, `.gitignore`, `project.godot`, `docs/TEAM_TASKS.md`, `tools/`, and every file not listed above |
 
-Ownership changes: the pedestrians' `.glb.import` files moved from `ragdoll` to lead after Task 1 finished (lead set the rest-pose fix). `scripts/locomotion.gd` and `scripts/pedestrian.gd` moved from `animator` to lead after Task 2 finished (lead fixed the blend-point name warning and switched pedestrians to pavement navigation). Phase 2: `scripts/player.gd` moved from lead to `vehicles`; with `traffic` finished, `vehicles` may also add driver, passenger and steering-wheel hooks to `scripts/car.gd` and `scripts/traffic.gd`, but not change handling or AI driving.
+Ownership changes: the pedestrians' `.glb.import` files moved from `ragdoll` to lead after Task 1 finished (lead set the rest-pose fix). `scripts/locomotion.gd` and `scripts/pedestrian.gd` moved from `animator` to lead after Task 2 finished (lead fixed the blend-point name warning and switched pedestrians to pavement navigation). Task 5: `scripts/pedestrian_navigation.gd` moved from `traffic` to lead (passing on crossings). Phase 2: `scripts/player.gd` moved from lead to `vehicles`; with `traffic` finished, `vehicles` may also add driver, passenger and steering-wheel hooks to `scripts/car.gd` and `scripts/traffic.gd`, but not change handling or AI driving.
 
 Notes on shared code: the car-hit call in `car.gd` (owner `traffic`) and `hit_by_vehicle()` in `pedestrian.gd` (owner `animator`) are changed by those owners at `ragdoll`'s request. In Phase 2 `vehicles` keeps driver/occupant/steering-wheel code in new scripts (for example `scripts/vehicle_occupants.gd`, `scripts/steering_wheel.gd`) and asks `traffic` for the hook lines in `car.gd`/`traffic.gd`; `player.gd` moves to `vehicles` in Phase 2.
 
@@ -522,6 +528,7 @@ godot --headless --path . --script tests/performance_profile.gd
 godot --headless --path . --script tests/pedestrian_models_test.gd
 godot --headless --path . --script tests/skeleton_test.gd
 godot --headless --path . --script tests/ragdoll_models_test.gd
+godot --headless --path . --script tests/animation_sets_test.gd
 ```
 
 `skeleton_test.gd` checks that all 23 characters have every standard bone. `ragdoll_models_test.gd` hits every character with a car or bus and checks the realistic mesh stays visible with no stick figure, no body below the ground or NaN, joints within 2 cm, settling within 5 s, and the player's recovery blend. Renders: `godot --path . --script tests/view_ragdoll.gd` (ragdolls), `tests/view_animation.gd -- <PED_ID> idle:0,walk:1.25,run:4.5 front|side|34` (walk cycles), `tests/view_traffic.gd` (F6 top-down), `tests/view_driver.gd -- player` (player model).

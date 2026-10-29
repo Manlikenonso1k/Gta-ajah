@@ -433,11 +433,8 @@ func _update_ped_debug_label() -> void:
 	if nearest == null:
 		_ped_debug_label.text = "PEDESTRIAN INSPECTOR  [F4 off]\nNo pedestrians loaded"
 		return
-	var anim_name := "procedural_walk"
-	var animation_player := nearest.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	if animation_player != null and not animation_player.current_animation.is_empty():
-		anim_name = animation_player.current_animation
-	_ped_debug_label.text = "PEDESTRIAN INSPECTOR  [F4 off]\n%s  /  %s\nModel: %s\nCategory: %s  |  Outfit: %s\nAnimation: %s  |  Instance: %d" % [
+	var anim_name: String = nearest.animation_summary() if nearest.has_method("animation_summary") else "procedural_walk"
+	_ped_debug_label.text = "PEDESTRIAN INSPECTOR  [F4 off]\n%s  /  %s\nModel: %s\nCategory: %s  |  Outfit: %s  |  Instance: %d\nClips: %s" % [
 		nearest.get("character_id"), nearest.get("character_display_name"), nearest.get("model_path"),
-		nearest.get("appearance_category"), nearest.get("outfit_id"), anim_name, nearest.get_instance_id()
+		nearest.get("appearance_category"), nearest.get("outfit_id"), nearest.get_instance_id(), anim_name
 	]

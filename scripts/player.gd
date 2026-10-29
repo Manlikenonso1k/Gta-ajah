@@ -15,6 +15,7 @@ extends CharacterBody3D
 const Ragdoll = preload("res://scripts/ragdoll.gd")
 const RealisticRagdoll = preload("res://scripts/realistic_ragdoll.gd")
 const Locomotion = preload("res://scripts/locomotion.gd")
+const AnimationSets = preload("res://scripts/animation_sets.gd")
 const SkeletonMap = preload("res://scripts/skeleton_map.gd")
 const PLAYER_JSON := "res://assets/characters/player/player.json"
 
@@ -87,7 +88,9 @@ func _load_model() -> void:
 	model.name = "PlayerModel"
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var loco := Locomotion.create(model, {"idle": "Idle"}, rng)
+	# Same clip sets as the pedestrians, from player.json's gender and tags
+	var clips := AnimationSets.pick(str(info.get("id", "PLAYER")), str(info.get("gender", "male")), info.get("tags", []))
+	var loco := Locomotion.create(model, clips, rng)
 	if loco == null:
 		push_warning("player model has no standard skeleton; using the stick figure")
 		model.free()
