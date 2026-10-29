@@ -131,9 +131,11 @@ func _setup_abduction(skeleton: Skeleton3D) -> void:
 		return
 	# Sample a second of the idle (the worst, hands-together case) and take the
 	# smallest sideways gap between either hand and the hip centreline, in metres.
-	var inv := model.global_transform.affine_inverse()
+	# Model space from local transforms, so this also works before the model
+	# is added to the scene (seated drivers and passengers are built that way)
+	var to_model := _chain(skeleton, model)
 	var centreline := func(bone: int) -> float:
-		return (inv * (skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin)).x
+		return (to_model * skeleton.get_bone_global_pose(bone).origin).x
 	var worst := INF
 	for s in 4:
 		tree.advance(0.25)

@@ -55,6 +55,22 @@ Headless CPU only, no GPU. The average sits at about 6.9 ms (~145 fps) on both p
 
 ## Reviews
 
+### Arm fix (rest pose), 2026-10-29
+
+**Bug (owner report):** pedestrians' arms looked wrong; only Nathan's were right. From the front the forearms of every other model were raised in front of the chest in idle, walk and run. Earlier reviews used side views, which hid this, and the first fix (pushing the upper arms outward) treated the wrong cause.
+
+**Cause:** measured rest poses. The clip rig and Nathan rest in a T-pose (upper arm 0° from horizontal, elbow 0–2°). Every other character, and the player, rested in an A-pose: upper arm 45–48° down, elbow bent 25–47°. The shared clips store absolute bone rotations on axes derived from each rest pose, so they only matched Nathan.
+
+**Fix:** `retarget/rest_fixer/fix_silhouette/enable = true` and `threshold = 1.0` in all 23 pedestrian `.glb.import` files (the default 15° threshold left the generated women at 14°). After reimport, all 23 measure within 1° of the clip rig. Front and 3/4 renders checked by eye: PED_BA_M09, PED_BA_M07, PED_BA_F03 (dress), Eric, Carla.
+
+**Knock-on fixes:**
+- `locomotion.gd` read world transforms during setup, which failed (65 errors per smoke run) for seated drivers built before entering the scene. It now uses local transforms.
+- Eric's ragdoll settled at 5.22 s, just past the 5 s limit; three others were at 4.95–4.98 s. `realistic_ragdoll.gd` now raises damping once a body is nearly still (back to normal if knocked again). Every character now settles by 4.2 s; the tumble is unchanged.
+
+**Verification:** run in a separate worktree of the last commit plus only these changes, so the unfinished Phase 2 work wasn't involved. 11/11 tests pass with 0 errors and 0 warnings; the ragdoll test was run twice (worst joint gap 1.6 cm). Profile: High 6.897 ms avg / 10.239 max; Low 6.890 / 9.130. Ragdoll renders (danfo and Corolla) look as before. In the main tree, `smoke_test` currently fails with `driving: false`. That is `vehicles`' Phase 2 entry/exit work, not this change: the isolated run passes.
+
+Verdict: approved for commit.
+
 ### Phase 1 combined pass (Tasks 1, 2, 3 and Task 4 steps 1–2), 2026-10-29
 
 Run by the lead on Windows 10 (Godot 4.7.2), after all four builders reported done, with every task's changes in one tree. `project.godot` includes the Jolt solver settings Task 1 needs.

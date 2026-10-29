@@ -4,9 +4,11 @@ Every pedestrian model in the game. `scripts/pedestrian_registry.gd` is the sour
 
 **Population:** 90% Black African, 10% white (`BLACK_AFRICAN_WEIGHT` / `WHITE_WEIGHT` in the registry). Within each group the least-used model is picked next, so all 18 Black African models appear before any repeats. A 30-pedestrian city measured 26 Black African / 4 white, using 22 different models.
 
-**Animation:** none of the models play their own clips. `scripts/humanoid_walk.gd` finds the thigh, knee, upper-arm and forearm bones on any of the three skeleton types (MPFB/Mixamo, Renderpeople, Mixamo with numbered suffixes), lowers the arms out of the T-pose and swings the limbs.
+**Skeleton:** every model is imported onto Godot's standard humanoid skeleton (`GeneralSkeleton`) by a `BoneMap` in its `.glb.import`. The same import block also sets `retarget/rest_fixer/fix_silhouette/enable = true` and `threshold = 1.0`, which resets the rest pose to the standard T-pose. Without it, a model that rests in an A-pose plays the shared clips with its forearms raised in front of the chest.
 
-**When hit by a car:** the pedestrian is replaced by the existing procedural ragdoll from `scripts/ragdoll.gd`, with a matching skin tone but not matching clothes. A ragdoll built on each model's own skeleton is still to do.
+**Animation:** none of the models play their own clips. All of them share the mocap library `assets/animations/pedestrian_library.res` through `scripts/locomotion.gd`. `scripts/humanoid_walk.gd` is only a fallback for a skeleton that can't take the clips.
+
+**When hit by a car:** the model itself goes limp: `scripts/realistic_ragdoll.gd` drives its skeleton from 16 physics bodies. The procedural stick ragdoll is only a fallback if the model has no standard skeleton.
 
 | Stable ID | File (under `assets/characters/pedestrians/`) | Appearance | Outfit | Source and licence | Notes |
 |---|---|---|---|---|---|
@@ -41,10 +43,10 @@ Every pedestrian model in the game. `scripts/pedestrian_registry.gd` is the sour
 **A downloaded model** (Sketchfab, a store):
 1. Put the `.glb` in `assets/characters/pedestrians/black_african/` or `white/`, and add its source link and licence to `assets/characters/pedestrians/CREDITS_SKETCHFAB.md`.
 2. Slim it: `blender -b --python blender/slim_characters.py -- <file.glb>` (removes animations and morph targets, caps textures at 1024 px, WebP).
-3. In its `.glb.import` file set `gltf/embedded_image_handling=2` (textures stay inside the scene, GPU-compressed), then run `godot --headless --path . --import`.
+3. In its `.glb.import` file set `gltf/embedded_image_handling=2` (textures stay inside the scene, GPU-compressed). Copy the skeleton block from a character with the same rig: `nathan.glb.import` for Renderpeople, `PED_BA_M01.glb.import` for MPFB/Mixamo. That block holds the `BoneMap` and the two `fix_silhouette` lines. Change the `PATH:...Skeleton3D` key to the new model's skeleton path and the `bone_map/...` names if its bones are named differently. Then run `godot --headless --path . --import`.
 4. Add an entry to `CHARACTERS` in `scripts/pedestrian_registry.gd` with a new stable ID and its `scale` (Renderpeople files are in centimetres: 0.01).
-5. Run `godot --headless --path . --script tests/pedestrian_models_test.gd`. It reports the head height; adjust `scale` until it's 1.4–1.85 m.
+5. Run `godot --headless --path . --script tests/skeleton_test.gd` and `tests/pedestrian_models_test.gd`. The second reports the head height; adjust `scale` until it's 1.4–1.85 m. Render it walking from the front (`tests/view_animation.gd -- <ID> idle:0,walk:1.25,run:4.5 front`) and check the arms hang at the sides.
 
-**A generated character:** add an entry to `ROSTER` in `blender/make_pedestrians.py`, run `blender -b --python blender/make_pedestrians.py -- <ID>`, set `embedded_image_handling=2` in the new `.glb.import` if it isn't already, reimport, and run the test. The roster JSON updates itself.
+**A generated character:** add an entry to `ROSTER` in `blender/make_pedestrians.py` and run `blender -b --python blender/make_pedestrians.py -- <ID>`. Give the new `.glb.import` `embedded_image_handling=2` and the same skeleton block as `PED_BA_M01.glb.import` (with its own `PATH:<ID>_rig/Skeleton3D`). Then reimport and run the two tests and the front render. The roster JSON updates itself.
 
 Models must face +Z with the left side on +X and feet at the origin (the glTF convention); `pedestrian.gd` turns them to face the game's −Z.

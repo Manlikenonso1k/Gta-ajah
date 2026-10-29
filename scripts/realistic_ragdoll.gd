@@ -25,6 +25,15 @@ const REMOVE_AFTER := 20.0
 ## Mesh and physics stop beyond this distance from the camera
 const CULL_DISTANCE := 120.0
 const SETTLE_SPEED := 0.12
+## Body damping during the fall, and once the body has nearly stopped (so the
+## last slow roll dies out instead of creeping). Back to falling damping if it
+## is knocked again.
+const FALL_LINEAR_DAMP := 0.2
+const FALL_ANGULAR_DAMP := 2.6
+const REST_LINEAR_DAMP := 1.5
+const REST_ANGULAR_DAMP := 9.0
+const REST_DAMP_BELOW := 0.5
+const REST_DAMP_ABOVE := 2.0
 ## Average adult used for the size proportions below
 const REFERENCE_HEIGHT := 1.75
 
@@ -115,6 +124,7 @@ var _pivots := []
 var _poser: SkeletonModifier3D
 var _speed_cap := 8.0
 var _still_time := 0.0
+var _rest_damped := false
 var _culled := false
 ## Recovery blend: bone -> [from local rotation, to local rotation]; hips also positions
 var _blend := {}
@@ -246,8 +256,8 @@ func _build(new_model: Node3D, new_skeleton: Skeleton3D) -> void:
 		body.mass = maxf(total_mass * float(def[3]) / share_total, 1.3)
 		body.collision_layer = Ragdoll.LAYER_RAGDOLL
 		body.collision_mask = Ragdoll.MASK_RAGDOLL
-		body.linear_damp = 0.2
-		body.angular_damp = 2.6
+		body.linear_damp = FALL_LINEAR_DAMP
+		body.angular_damp = FALL_ANGULAR_DAMP
 		body.physics_material_override = _material()
 		var shape := CollisionShape3D.new()
 		var length: float = spec.a.distance_to(spec.b)
@@ -489,6 +499,16 @@ func _physics_process(delta: float) -> void:
 	for body: RigidBody3D in bodies.values():
 		if not body.sleeping:
 			fastest = maxf(fastest, maxf(body.linear_velocity.length(), body.angular_velocity.length() * 0.2))
+	var resting := _rest_damped
+	if not _rest_damped and age > 1.0 and fastest < REST_DAMP_BELOW:
+		resting = true
+	elif _rest_damped and fastest > REST_DAMP_ABOVE:
+		resting = false
+	if resting != _rest_damped:
+		_rest_damped = resting
+		for body: RigidBody3D in bodies.values():
+			body.linear_damp = REST_LINEAR_DAMP if resting else FALL_LINEAR_DAMP
+			body.angular_damp = REST_ANGULAR_DAMP if resting else FALL_ANGULAR_DAMP
 	_still_time = _still_time + delta if fastest < SETTLE_SPEED else 0.0
 	settled = _still_time > 0.4 or _culled
 	if settled and _still_time > 1.0 and age > 2.0:
