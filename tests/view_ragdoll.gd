@@ -121,8 +121,11 @@ func _shoot(vehicle: String, id: String) -> void:
 
 	var camera := Camera3D.new()
 	world.add_child(camera)
-	camera.fov = 55.0
-	camera.look_at_from_position(Vector3(3.5, 2.2, 11.0), Vector3(3.5, 0.8, 0), Vector3.UP)
+	camera.fov = 50.0
+	# The camera follows the victim/ragdoll in a tight side view, so limbs,
+	# hands and feet are large enough to inspect and the vehicle (which may be
+	# a whole coach) doesn't hide the body.
+	_aim(camera, victim.global_position + Vector3.UP * 0.9)
 
 	var images := []
 	var frame := 0
@@ -133,13 +136,14 @@ func _shoot(vehicle: String, id: String) -> void:
 			car.linear_velocity = forward * SPEED
 		await physics_frame
 		frame += 1
+		var target: Vector3 = victim.ragdoll.pelvis.global_position if victim.ragdoll != null else victim.global_position + Vector3.UP * 0.9
 		if victim.ragdoll != null and after_hit < 0:
 			after_hit = 0
-			images.append(await _grab())
+			images.append(await _grab(camera, target))
 		elif after_hit >= 0:
 			after_hit += 1
 			if after_hit % FRAME_GAP == 0:
-				images.append(await _grab())
+				images.append(await _grab(camera, target))
 	if victim.ragdoll == null:
 		print("FAIL %s %s: no hit" % [vehicle, id])
 	else:
@@ -163,7 +167,14 @@ func _shoot(vehicle: String, id: String) -> void:
 	await process_frame
 
 
-func _grab() -> Image:
+## Frames `target` in a tight, slightly raised side view (camera on +Z, so the
+## body is seen side-on with the vehicle crossing behind it).
+func _aim(camera: Camera3D, target: Vector3) -> void:
+	camera.look_at_from_position(target + Vector3(0.4, 1.1, 4.6), target, Vector3.UP)
+
+
+func _grab(camera: Camera3D, target: Vector3) -> Image:
+	_aim(camera, target)
 	await process_frame
 	await process_frame
 	return root.get_texture().get_image()

@@ -121,10 +121,20 @@ var _blend := {}
 var _blend_time := -1.0
 var _blend_duration := 0.5
 var _stand_pose := {}
+## Set once the recovery blend has finished; stops re-posing from the bodies
+var _recovered_done := false
 
 
 class Poser extends SkeletonModifier3D:
 	var ragdoll: Node
+
+	# Godot renamed this virtual across 4.x: 4.3-4.5 call
+	# _process_modification() (no args); later builds call
+	# _process_modification_with_delta(delta). Override both so the pose is
+	# written whichever one this runtime invokes; the unused one is a no-op.
+	func _process_modification() -> void:
+		if is_instance_valid(ragdoll):
+			ragdoll.apply_pose()
 
 	func _process_modification_with_delta(_delta: float) -> void:
 		if is_instance_valid(ragdoll):
@@ -230,11 +240,14 @@ func _build(new_model: Node3D, new_skeleton: Skeleton3D) -> void:
 		var spec: Dictionary = specs[part]
 		var body := RigidBody3D.new()
 		body.name = part
-		body.mass = maxf(total_mass * float(def[3]) / share_total, 0.8)
+		# A higher floor on the light extremities (hands, feet) keeps the mass
+		# ratio across the wrist and ankle joints gentle enough that Jolt's
+		# solver doesn't let those joints pull apart under a hard impact.
+		body.mass = maxf(total_mass * float(def[3]) / share_total, 1.3)
 		body.collision_layer = Ragdoll.LAYER_RAGDOLL
 		body.collision_mask = Ragdoll.MASK_RAGDOLL
-		body.linear_damp = 0.05
-		body.angular_damp = 1.2
+		body.linear_damp = 0.2
+		body.angular_damp = 2.6
 		body.physics_material_override = _material()
 		var shape := CollisionShape3D.new()
 		var length: float = spec.a.distance_to(spec.b)
@@ -291,6 +304,10 @@ func _build(new_model: Node3D, new_skeleton: Skeleton3D) -> void:
 	_poser = Poser.new()
 	_poser.ragdoll = self
 	skeleton.add_child(_poser)
+	# The bodies move in the physics step, so pose the skeleton there too; the
+	# default IDLE callback lags the physics and, in a physics-frame-only loop,
+	# is starved entirely.
+	skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 
 
 ## Rest pose with the thighs 25° forward and the arms lowered 50° from the
@@ -417,8 +434,10 @@ func _launch(character_velocity: Vector3, impact_velocity: Vector3, impact_point
 	var front_top := lerpf(0.95, 2.4, heavy)
 	# Momentum shared with the vehicle, capped to a believable throw
 	var transfer := vehicle_mass / (vehicle_mass + total_mass) if vehicle_mass > 0.0 else 0.0
-	var throw := minf(speed * transfer, lerpf(10.0, 14.0, heavy))
-	_speed_cap = maxf(throw * 1.3, 6.0)
+	var throw := minf(speed * transfer, lerpf(7.5, 10.0, heavy))
+	# Cap each body's speed close to the throw while the impact plays out, so
+	# joints aren't yanked apart by very large per-step relative velocities.
+	_speed_cap = maxf(throw * 1.1, 5.0)
 	var side := direction.cross(up)
 	var offset := (impact_point - pelvis.global_position).dot(side) if impact_point.is_finite() else 0.0
 	for part: String in bodies:
@@ -426,13 +445,16 @@ func _launch(character_velocity: Vector3, impact_velocity: Vector3, impact_point
 		var h := body.global_position.y - ground
 		var share := 1.0
 		if h > bumper_top:
-			share = lerpf(1.0, lerpf(0.3, 0.85, heavy), clampf((h - bumper_top) / maxf(front_top - bumper_top, 0.1), 0.0, 1.0))
+			# A car folds the upper body over the bonnet (low upper-body share);
+			# a bus drives the whole body at nearly one speed (high, uniform
+			# share), which also keeps the torso joints from shearing.
+			share = lerpf(1.0, lerpf(0.3, 0.9, heavy), clampf((h - bumper_top) / maxf(front_top - bumper_top, 0.1), 0.0, 1.0))
 		if h > front_top:
-			share = lerpf(0.25, 0.85, heavy)
+			share = lerpf(0.25, 0.9, heavy)
 		var lift := throw * lerpf(0.16, 0.06, heavy) * (1.0 if h < bumper_top else 0.4)
 		body.linear_velocity = character_velocity + direction * throw * share + up * lift
 		# A hit off-centre turns the body around
-		body.angular_velocity = up * clampf(offset * throw * 0.15, -4.0, 4.0)
+		body.angular_velocity = up * clampf(offset * throw * 0.1, -2.5, 2.5)
 
 
 func _physics_process(delta: float) -> void:
@@ -454,6 +476,14 @@ func _physics_process(delta: float) -> void:
 		for body: RigidBody3D in bodies.values():
 			body.freeze = far
 		_poser.active = not far
+
+	# Pose the skeleton from the bodies every physics step. The Poser
+	# SkeletonModifier3D is kept for correct placement in the skeleton's update,
+	# but its callback is not reliably pumped for a skeleton with no active
+	# AnimationMixer, so the ragdoll drives the pose itself from here (the same
+	# way humanoid_walk.gd poses these skeletons while alive).
+	if not _culled and not _recovered_done:
+		apply_pose()
 
 	var fastest := 0.0
 	for body: RigidBody3D in bodies.values():
@@ -570,6 +600,7 @@ func _apply_blend() -> void:
 
 func _finish_recovery() -> void:
 	_blend_time = -1.0
+	_recovered_done = true
 	for bone: int in _stand_pose:
 		skeleton.set_bone_pose_position(bone, _stand_pose[bone][0])
 		skeleton.set_bone_pose_rotation(bone, _stand_pose[bone][1])

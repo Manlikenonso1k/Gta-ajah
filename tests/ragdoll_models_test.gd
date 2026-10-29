@@ -9,6 +9,7 @@ extends SceneTree
 const Registry = preload("res://scripts/pedestrian_registry.gd")
 const Walk = preload("res://scripts/humanoid_walk.gd")
 const RealisticRagdoll = preload("res://scripts/realistic_ragdoll.gd")
+const Ragdoll = preload("res://scripts/ragdoll.gd")
 
 const SECONDS := 5.0
 const MAX_JOINT_GAP := 0.02
@@ -16,7 +17,53 @@ const MAX_JOINT_GAP := 0.02
 
 func _initialize() -> void:
 	create_timer(240.0).timeout.connect(func() -> void: print("TIMEOUT"); quit(1))
+	# --solver-boost is an investigation aid: Jolt reads these per step, so it
+	# lets this test preview the project.godot solver settings the realistic
+	# ragdoll needs (position_steps/velocity_steps). It does not change the
+	# game; the real values live in project.godot (owned by the lead).
+	if OS.get_cmdline_user_args().has("--solver-boost"):
+		ProjectSettings.set_setting("physics/jolt_physics_3d/simulation/position_steps", 24)
+		ProjectSettings.set_setting("physics/jolt_physics_3d/simulation/velocity_steps", 24)
+		ProjectSettings.set_setting("physics/jolt_physics_3d/simulation/baumgarte_stabilization_factor", 0.4)
+		print("SOLVER-BOOST: position_steps=%s velocity_steps=%s baumgarte=%s" % [
+			ProjectSettings.get_setting("physics/jolt_physics_3d/simulation/position_steps"),
+			ProjectSettings.get_setting("physics/jolt_physics_3d/simulation/velocity_steps"),
+			ProjectSettings.get_setting("physics/jolt_physics_3d/simulation/baumgarte_stabilization_factor")])
+	if OS.get_cmdline_user_args().has("--fps8"):
+		_fps8.call_deferred()
+		return
 	_run.call_deferred()
+
+
+## Measures the CPU frame cost of 8 active (un-culled) realistic ragdolls, the
+## Low preset's ragdoll limit:  --script tests/ragdoll_models_test.gd -- --fps8
+func _fps8() -> void:
+	_ground()
+	Ragdoll.max_ragdolls = 8
+	var camera := Camera3D.new()
+	root.add_child(camera)
+	camera.look_at_from_position(Vector3(8.0, 6.0, 15.0), Vector3(8.0, 0.5, 0.0), Vector3.UP)
+	var entries := Registry.all()
+	for i in 8:
+		var entry: Dictionary = entries[i % entries.size()]
+		var model := _character(entry, Vector3(i * 2.2, 0.0, 0.0))
+		await physics_frame
+		RealisticRagdoll.spawn(model, root, Vector3(0, 0, -1.0), Vector3(0, 0, -9.0),
+			model.global_position + Vector3(0.2, 0.6, 1.0), 1300.0)
+	for i in 40:
+		await process_frame
+	var usec := 0
+	var frames := 180
+	for i in frames:
+		var started := Time.get_ticks_usec()
+		await process_frame
+		usec += Time.get_ticks_usec() - started
+	var ms := float(usec) / float(frames) / 1000.0
+	print("fps8 ragdolls=%d avg_frame_ms=%.3f fps=%.1f physics_ms=%.3f position_steps=%s" % [
+		get_nodes_in_group("ragdolls").size(), ms, 1000.0 / maxf(ms, 0.01),
+		Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		ProjectSettings.get_setting("physics/jolt_physics_3d/simulation/position_steps")])
+	quit()
 
 
 func _ground() -> void:
