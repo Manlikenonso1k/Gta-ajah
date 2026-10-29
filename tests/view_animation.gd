@@ -134,25 +134,36 @@ func _build_stage(view: String) -> Node3D:
 	var dark := StandardMaterial3D.new()
 	dark.albedo_color = Color(0.2, 0.2, 0.2)
 	dark.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# Ground line and height marks every 0.5 m
+	# Ground line and height marks every 0.5 m. "front" and "34" use a ground
+	# plane; "side" uses a vertical scale line.
+	var flat := view == "front" or view == "34"
 	for i in 5:
+		# Height bars are edge-on (invisible) from front/side but become stripes
+		# from the 3/4 camera, so draw only the ground plane there.
+		if view == "34" and i > 0:
+			continue
 		var mark := MeshInstance3D.new()
 		var box := BoxMesh.new()
-		box.size = Vector3(6.0, 0.02 if i == 0 else 0.005, 6.0) if view == "front" else Vector3(0.1 if i == 0 else 0.01, 0.02 if i == 0 else 0.005, 6.0)
+		box.size = Vector3(6.0, 0.02 if i == 0 else 0.005, 6.0) if flat else Vector3(0.1 if i == 0 else 0.01, 0.02 if i == 0 else 0.005, 6.0)
 		mark.mesh = box
-		mark.position = Vector3(0, -0.01, -1.5 if view == "front" else 0.0) if i == 0 else Vector3(-1.0, i * 0.5, -1.5 if view == "front" else 0.0)
+		mark.position = Vector3(0, -0.01, -1.5 if flat else 0.0) if i == 0 else Vector3(-1.0, i * 0.5, -1.5 if flat else 0.0)
 		mark.material_override = dark
 		stage.add_child(mark)
 	_camera = Camera3D.new()
 	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	_camera.size = 2.4
+	# Characters face +Z here (glTF convention).
 	if view == "front":
-		# Characters face +Z here (glTF convention), so the front camera is at +Z
 		_camera.position = Vector3(0.0, 0.95, 5.0)
+	elif view == "34":
+		# Three-quarter view from the character's front-left, looking at the body
+		_camera.position = Vector3(3.6, 1.05, 3.6)
 	else:
 		# Side view from the character's left (+X), looking toward -X
 		_camera.position = Vector3(5.0, 0.95, 0.0)
 		_camera.rotation.y = PI / 2.0
 	stage.add_child(_camera)
+	if view == "34":
+		_camera.look_at(Vector3(0.0, 0.95, 0.0))
 	_camera.make_current()
 	return stage

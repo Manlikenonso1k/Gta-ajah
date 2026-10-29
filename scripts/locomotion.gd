@@ -29,6 +29,18 @@ const GAIT_SPRINT := 3.0
 ## Playback speed limits, so extreme speeds don't look like fast-forward
 const MIN_SCALE := 0.55
 const MAX_SCALE := 1.7
+## The mocap clips keep the upper arms close to a slim mannequin; broader MPFB
+## characters would otherwise push the forearms/hands into the torso and hips.
+## At setup we measure how close the idle hands come to the body centreline and
+## abduct (swing outward) the upper arms by an angle that opens them to a safe
+## clearance: near zero for slim builds whose hands already hang clear, more for
+## broad or short-armed ones whose hands tuck into the belly. Applied each frame
+## on top of whatever the clip plays, so the swing timing is untouched and the
+## shared clips are not edited.
+const ABDUCT_TARGET := 0.15   ## want each hand at least this far (m) from the centreline
+const ABDUCT_GAIN := 1.6      ## radians added per metre of shortfall
+const ABDUCT_MIN := 0.04
+const ABDUCT_MAX := 0.34
 
 static var _library: AnimationLibrary
 
@@ -42,6 +54,12 @@ var _gait := 0.0
 var _kerb := 0.0
 var _stride := 1.0
 var _clips := {}
+## Upper-arm abduction post-process: bone indices, axis in skeleton space, angle
+var _skeleton: Skeleton3D
+var _abduct_l := -1
+var _abduct_r := -1
+var _abduct_axis := Vector3.BACK
+var _abduct_angle := 0.0
 
 
 static func library() -> AnimationLibrary:
@@ -86,8 +104,60 @@ func _setup(model_: Node3D, skeleton: Skeleton3D, clips: Dictionary, rng: Random
 	tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 	tree.active = true
 	_apply()
+	_setup_abduction(skeleton)
 	# Random starting point in every cycle
 	tree.advance(rng.randf_range(0.0, 3.0))
+	_apply_abduction()
+
+
+## Measures how close the idle hands come to the body centreline and sets the
+## per-frame upper-arm abduction so broad or short-armed builds keep their arms
+## clear of the torso, while slim builds are barely touched.
+func _setup_abduction(skeleton: Skeleton3D) -> void:
+	_skeleton = skeleton
+	_abduct_l = skeleton.find_bone("LeftUpperArm")
+	_abduct_r = skeleton.find_bone("RightUpperArm")
+	if _abduct_l < 0 or _abduct_r < 0:
+		return
+	# Clips face +Z; abducting about the model's forward axis swings the arms
+	# out sideways. Expressed in skeleton space so wrapper transforms (e.g.
+	# Renderpeople's Z-up) don't flip it. Left arm +, right arm - (verified).
+	_abduct_axis = (_chain(skeleton, model).basis.inverse() * Vector3.BACK).normalized()
+	var hips := skeleton.find_bone("Hips")
+	var hand_l := skeleton.find_bone("LeftHand")
+	var hand_r := skeleton.find_bone("RightHand")
+	if hips < 0 or hand_l < 0 or hand_r < 0:
+		_abduct_angle = ABDUCT_MIN
+		return
+	# Sample a second of the idle (the worst, hands-together case) and take the
+	# smallest sideways gap between either hand and the hip centreline, in metres.
+	var inv := model.global_transform.affine_inverse()
+	var centreline := func(bone: int) -> float:
+		return (inv * (skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin)).x
+	var worst := INF
+	for s in 4:
+		tree.advance(0.25)
+		var hip_x: float = centreline.call(hips)
+		worst = minf(worst, minf(absf(centreline.call(hand_l) - hip_x), absf(centreline.call(hand_r) - hip_x)))
+	_abduct_angle = clampf((ABDUCT_TARGET - worst) * ABDUCT_GAIN + ABDUCT_MIN, ABDUCT_MIN, ABDUCT_MAX)
+
+
+## Swings each upper arm outward by _abduct_angle, on top of the pose the tree
+## just wrote. Works in skeleton space so it reads as abduction whatever the
+## clip is doing; children (forearm, hand) follow.
+func _apply_abduction() -> void:
+	if _abduct_angle <= 0.0 or _skeleton == null:
+		return
+	for pair in [[_abduct_l, 1.0], [_abduct_r, -1.0]]:
+		var bone: int = pair[0]
+		if bone < 0:
+			continue
+		var parent := _skeleton.get_bone_parent(bone)
+		var parent_basis := _skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
+		var turn := Basis(_abduct_axis, _abduct_angle * pair[1])
+		var new_global := turn * _skeleton.get_bone_global_pose(bone).basis
+		var local := parent_basis.inverse() * new_global
+		_skeleton.set_bone_pose_rotation(bone, local.get_rotation_quaternion())
 
 
 ## Leg length of this character relative to the clips' source skeleton.
@@ -107,10 +177,12 @@ func _build_tree() -> AnimationNodeBlendTree:
 	var move := AnimationNodeBlendSpace1D.new()
 	move.min_space = 0.0
 	move.max_space = GAIT_SPRINT
-	for point in [[_clips.idle, GAIT_IDLE], [_clips.walk, GAIT_WALK], [_clips.jog, GAIT_JOG], [_clips.sprint, GAIT_SPRINT]]:
+	for point in [["idle", _clips.idle, GAIT_IDLE], ["walk", _clips.walk, GAIT_WALK], ["jog", _clips.jog, GAIT_JOG], ["sprint", _clips.sprint, GAIT_SPRINT]]:
 		var node := AnimationNodeAnimation.new()
-		node.animation = point[0]
-		move.add_blend_point(node, point[1])
+		node.animation = point[1]
+		node.resource_name = point[0]
+		# Godot 4.7 warns (and will later require) a name for each blend point
+		move.add_blend_point(node, point[2], -1, point[0])
 	blend_tree.add_node("move", move, Vector2(0, 0))
 	blend_tree.add_node("scale", AnimationNodeTimeScale.new(), Vector2(200, 0))
 	var kerb := AnimationNodeAnimation.new()
@@ -150,6 +222,7 @@ func advance(delta: float) -> void:
 	_kerb = move_toward(_kerb, 1.0 if state == "wait_at_kerb" and speed < 0.3 else 0.0, delta * 2.0)
 	_apply()
 	tree.advance(delta)
+	_apply_abduction()
 
 
 func _target_gait() -> float:

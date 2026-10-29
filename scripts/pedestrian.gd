@@ -1,14 +1,44 @@
 extends CharacterBody3D
 ## Wandering pedestrian. Turns into a ragdoll when hit by a car.
+##
+## Animation: a model imported with the standard skeleton (GeneralSkeleton,
+## see scripts/skeleton_map.gd) is animated with real motion-capture clips
+## through scripts/locomotion.gd (an AnimationTree blending idle -> walk ->
+## jog -> run). A model whose skeleton can't take the clips falls back to the
+## procedural scripts/humanoid_walk.gd; a pedestrian with no imported model at
+## all uses the procedural body in scripts/ragdoll.gd.
+##
+## Movement: when the pavement graph is available this delegates walking to
+## scripts/pedestrian_navigation.gd (owner: traffic), which calls
+## set_locomotion(speed, state, facing) each physics frame. Otherwise it falls
+## back to bounded wandering. Either way set_locomotion is the single entry
+## point that drives the animation and turns the body.
 
 const Ragdoll = preload("res://scripts/ragdoll.gd")
+const RealisticRagdoll = preload("res://scripts/realistic_ragdoll.gd")
 const HumanoidWalk = preload("res://scripts/humanoid_walk.gd")
+const Locomotion = preload("res://scripts/locomotion.gd")
+const PedestrianNavigation = preload("res://scripts/pedestrian_navigation.gd")
+const PavementGraph = preload("res://scripts/pavement_graph.gd")
+const Registry = preload("res://scripts/pedestrian_registry.gd")
 
-const SPEED := 1.4
+## A comfortable walking pace. Kept close to the mocap walk clip's natural
+## ground speed so playback matches without the time-scale clamp, which would
+## otherwise slide the feet.
+const SPEED := 1.25
 const VISIBLE_DISTANCE := 120.0
 ## Real legs need about 1.8 steps per second at walking speed; the phase
 ## below was tuned for the stick figure's shorter stride
 const WALK_CADENCE := 1.8
+## Beyond this distance from the camera, advance the AnimationTree only every
+## ANIM_LOD_INTERVAL frames (with the accumulated time, so the feet keep pace).
+## Beyond VISIBLE_DISTANCE the mesh is hidden and main.gd stops processing us.
+const ANIM_LOD_DISTANCE := 40.0
+const ANIM_LOD_INTERVAL := 3
+## Traffic's T3 drives pedestrians along the pavement graph through the
+## PedestrianNavigation hook below. Set false to fall back to the old bounded
+## wander; set_locomotion and all of the animation work the same either way.
+const USE_PAVEMENT_NAVIGATION := true
 
 var colors: Dictionary
 var wander_origin := Vector3.ZERO
@@ -21,15 +51,28 @@ var model_scene: PackedScene
 var character_scale := 1.0
 var collision_radius := 0.3
 var collision_height := 1.8
+var tags: Array = []
+
+## Pavement navigation (owner: traffic). Non-null once the pavement graph is
+## ready; world_systems_test.gd reads this property.
+var navigation: RefCounted
+
+var _loco: RefCounted              ## mocap locomotion (scripts/locomotion.gd) or null
+var _model: Node3D                 ## the imported glTF model, if any
 var _model_animation_player: AnimationPlayer
-var _walker: RefCounted
+var _walker: RefCounted            ## procedural HumanoidWalk fallback
+var _limbs: Dictionary             ## procedural ragdoll body (no imported model)
 
 var _direction := Vector3.FORWARD
+var _facing := Vector3.FORWARD
 var _turn_timer := 0.0
-var _limbs: Dictionary
 var _phase := 0.0
 var _pause_timer := 0.0
 var _avoid_timer := 0.0
+var _last_delta := 1.0 / 60.0
+var _anim_accum := 0.0
+var _lod_counter := 0
+var _ragdolled := false
 
 
 func _ready() -> void:
@@ -48,6 +91,10 @@ func _ready() -> void:
 	var visual := Node3D.new()
 	visual.name = "CharacterVisual"
 	add_child(visual)
+	if tags.is_empty():
+		var entry := Registry.by_id(character_id)
+		if not entry.is_empty():
+			tags = entry.get("tags", [])
 	if model_scene != null:
 		var model := model_scene.instantiate()
 		model.name = "ImportedCharacterModel"
@@ -55,25 +102,61 @@ func _ready() -> void:
 		# Imported models face +Z (glTF); characters in this game face -Z
 		model.rotation.y = PI
 		visual.add_child(model)
+		_model = model
 		for mesh: GeometryInstance3D in model.find_children("*", "GeometryInstance3D", true, false):
 			# Too small to read beyond this, and skinned meshes are costly on phones
 			mesh.visibility_range_end = VISIBLE_DISTANCE
-		_walker = HumanoidWalk.create(model)
-		_model_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		if _walker != null and _model_animation_player != null:
-			# The procedural walk drives the skeleton; a clip would fight it
-			_model_animation_player.stop()
-			_model_animation_player = null
-		_set_model_animation("walk")
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(get_instance_id())
+		_loco = Locomotion.create(model, _clip_overrides(), rng)
+		if _loco == null:
+			# No standard skeleton: procedural swing, and silence any baked clip
+			_walker = HumanoidWalk.create(model)
+			_model_animation_player = model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+			if _walker != null and _model_animation_player != null:
+				_model_animation_player.stop()
+				_model_animation_player = null
+			_set_model_animation("walk")
 	else:
 		_limbs = Ragdoll.build_visual(visual, colors)
 	_phase = randf() * TAU
+	_facing = Vector3.FORWARD.rotated(Vector3.UP, rotation.y)
 	_pick_direction()
+	# Delegate walking to traffic's pavement navigation (T3) once enabled.
+	if USE_PAVEMENT_NAVIGATION:
+		var graph := PavementGraph.shared()
+		if graph != null and not graph.points.is_empty():
+			navigation = PedestrianNavigation.new(self)
+
+
+## Which walk clip suits this character: elders stroll, office workers walk
+## formally, everyone else uses the default walk.
+func _clip_overrides() -> Dictionary:
+	if tags.has("elder"):
+		return {"walk": "Walk_Slow"}
+	if tags.has("office") or tags.has("business_casual"):
+		return {"walk": "Walk_Formal"}
+	return {}
 
 
 func _physics_process(delta: float) -> void:
+	if _ragdolled:
+		return
+	_last_delta = delta
 	if not is_on_floor():
 		velocity += get_gravity() * delta
+	if navigation != null:
+		# Navigation sets velocity.x/z and calls set_locomotion(speed, state, facing)
+		navigation.physics_step(delta)
+	else:
+		_wander(delta)
+	move_and_slide()
+	_advance_animation(delta)
+
+
+## Bounded random wandering, used when no pavement graph is available. Computes
+## a direction and speed and routes them through set_locomotion like navigation.
+func _wander(delta: float) -> void:
 	_turn_timer -= delta
 	_avoid_timer -= delta
 	_pause_timer = maxf(0.0, _pause_timer - delta)
@@ -90,27 +173,59 @@ func _physics_process(delta: float) -> void:
 	if _pause_timer > 0.0:
 		velocity.x = move_toward(velocity.x, 0.0, SPEED * 5.0 * delta)
 		velocity.z = move_toward(velocity.z, 0.0, SPEED * 5.0 * delta)
-		move_and_slide()
-		_phase += delta
-		if not _limbs.is_empty():
-			Ragdoll.animate(_limbs, _phase, 0.0)
-		elif _walker != null:
-			_walker.pose(_phase * WALK_CADENCE, 0.0)
-		else:
-			_set_model_animation("idle")
+		set_locomotion(Vector2(velocity.x, velocity.z).length(), "idle", Vector3.INF)
 		return
 	velocity.x = _direction.x * SPEED
 	velocity.z = _direction.z * SPEED
-	move_and_slide()
-	rotation.y = lerp_angle(rotation.y, atan2(-_direction.x, -_direction.z), 6.0 * delta)
 	var actual_speed := Vector2(velocity.x, velocity.z).length()
-	_phase += actual_speed * 2.2 * delta
+	set_locomotion(actual_speed, "walk", _direction)
+
+
+## The single entry point movement code uses (navigation or the wander above).
+## `speed` is the ground speed in m/s; `state` is one of locomotion's states
+## (idle, walk, jog, run, wait_at_kerb). `facing` turns the body smoothly; pass
+## Vector3.INF to leave the heading unchanged.
+func set_locomotion(speed: float, state: String, facing := Vector3.INF) -> void:
+	if facing != Vector3.INF and Vector2(facing.x, facing.z).length_squared() > 0.0001:
+		_facing = Vector3(facing.x, 0.0, facing.z).normalized()
+		rotation.y = lerp_angle(rotation.y, atan2(-_facing.x, -_facing.z), clampf(8.0 * _last_delta, 0.0, 1.0))
+	if _loco != null:
+		_loco.set_locomotion(speed, state)
+
+
+## Advances whatever drives the pose. The mocap AnimationTree is advanced less
+## often far from the camera; the procedural fallbacks are cheap and run every
+## frame.
+func _advance_animation(delta: float) -> void:
+	if _loco != null:
+		if _distance_to_view() > ANIM_LOD_DISTANCE:
+			_anim_accum += delta
+			_lod_counter += 1
+			if _lod_counter >= ANIM_LOD_INTERVAL:
+				_loco.advance(_anim_accum)
+				_anim_accum = 0.0
+				_lod_counter = 0
+		else:
+			_loco.advance(_anim_accum + delta)
+			_anim_accum = 0.0
+			_lod_counter = 0
+		return
+	var actual_speed := Vector2(velocity.x, velocity.z).length()
 	if not _limbs.is_empty():
+		_phase += maxf(actual_speed, 0.0) * 2.2 * delta if actual_speed > 0.05 else delta
 		Ragdoll.animate(_limbs, _phase, clampf(actual_speed / SPEED, 0.0, 1.0) * 0.6)
 	elif _walker != null:
+		_phase += (actual_speed * 2.2 * delta) if actual_speed > 0.05 else delta
 		_walker.pose(_phase * WALK_CADENCE, clampf(actual_speed / SPEED, 0.0, 1.0))
 	else:
-		_set_model_animation("walk")
+		_set_model_animation("walk" if actual_speed > 0.2 else "idle")
+
+
+func _distance_to_view() -> float:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera != null:
+		return global_position.distance_to(camera.global_position)
+	return 0.0
 
 
 func _set_model_animation(wanted: String) -> void:
@@ -173,6 +288,26 @@ func _pick_direction() -> void:
 	_turn_timer = randf_range(3.0, 8.0)
 
 
-func hit_by_vehicle(vehicle_velocity: Vector3) -> void:
-	Ragdoll.spawn(get_parent(), global_transform, colors, vehicle_velocity * 0.8 + Vector3.UP * 3.0)
+## Hit by a car. Realistic ragdoll on the model's own skeleton (continues from
+## the current animated pose, so there is no jump); the procedural body falls
+## back to the old stick ragdoll. car.gd passes the impact point and mass.
+func hit_by_vehicle(vehicle_velocity: Vector3, impact_point := Vector3.INF, vehicle_mass := 1200.0) -> void:
+	if _ragdolled:
+		return
+	_ragdolled = true
+	set_physics_process(false)
+	if _loco != null:
+		_loco.stop()
+	var spawned: Node = null
+	if _model != null:
+		var point: Vector3 = impact_point if impact_point != Vector3.INF else global_position
+		var character_velocity := Vector3(velocity.x, 0.0, velocity.z)
+		# RealisticRagdoll reparents the model, so freeing the pedestrian is correct
+		spawned = RealisticRagdoll.spawn(_model, get_parent(), character_velocity, vehicle_velocity, point, vehicle_mass)
+	if spawned == null:
+		# Only a pedestrian with no standard-skeleton model (e.g. the procedural
+		# placeholder) falls back to the old stick ragdoll.
+		if _model != null:
+			push_warning("realistic ragdoll failed for %s; using stick fallback" % character_id)
+		Ragdoll.spawn(get_parent(), global_transform, colors, vehicle_velocity * 0.8 + Vector3.UP * 3.0)
 	queue_free()
