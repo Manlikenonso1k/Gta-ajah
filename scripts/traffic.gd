@@ -47,6 +47,7 @@ var _debug: Node3D
 
 
 func setup(world: Node3D, count: int) -> void:
+	add_to_group("traffic_manager")
 	_world = world
 	_graph = RoadGraph.shared()
 	_rng.seed = 7307
@@ -117,6 +118,19 @@ func _forget(driver: RefCounted) -> void:
 	drivers.erase(driver)
 	_next_think.erase(driver)
 	_last_think.erase(driver)
+
+
+## Hands a traffic car over to the player: traffic stops driving it.
+func release_car(car: Node) -> void:
+	for driver: RefCounted in drivers.duplicate():
+		if driver.car == car:
+			_forget(driver)
+	car.ai_enabled = false
+	car.ai_driver = null
+	car.remove_from_group("traffic")
+	car.freeze = false
+	car.set_physics_process(true)
+	car.set_meta("traffic_detail", true)
 
 
 func _free_spot() -> Dictionary:

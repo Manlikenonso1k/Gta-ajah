@@ -68,7 +68,8 @@ var clip_overrides := {}
 var anchor_state := ""
 ## With anchor_state set, walk this loop instead of standing: each stop is
 ## {"p": Vector3, "wait": seconds, "hide": bool (out of sight while waiting,
-## e.g. inside a shop), "bag": bool (carry a bag from here on)}
+## e.g. inside a shop), "bag": bool (carry a bag from here on), "face": Node3D
+## (turn to it while waiting), "free": bool (leave the game on arrival)}
 var loop_path: Array = []
 
 ## Pavement navigation (owner: traffic). Non-null once the pavement graph is
@@ -198,11 +199,18 @@ func _anchored(delta: float) -> void:
 		if _loop_wait <= 0.0:
 			visible = true
 			_loop_index = (_loop_index + 1) % loop_path.size()
-		set_locomotion(0.0, "idle", Vector3.INF)
+		var face: Variant = stop.get("face")
+		var toward := Vector3.INF
+		if face is Node3D and is_instance_valid(face):
+			toward = (face as Node3D).global_position - global_position
+		set_locomotion(0.0, "idle", toward)
 		return
 	var to_stop: Vector3 = stop.p - global_position
 	to_stop.y = 0.0
 	if to_stop.length() < 0.15:
+		if stop.get("free", false):
+			queue_free()
+			return
 		_loop_wait = float(stop.get("wait", 0.0)) + 0.001
 		if stop.get("hide", false):
 			visible = false

@@ -5,7 +5,8 @@ extends SceneTree
 ## "door": 6 frames of the sliding door opening, seen from the kerb side.
 ## "full": kerb side, front 3/4 and rear 3/4 of the van, door open.
 ## "inside": looking down through a cut-away roof, and in through the doorway.
-## "filled" seats traffic passengers and the conductor (as a moving danfo).
+## "filled" seats traffic passengers and the conductor; "moving" keeps the
+## conductor hanging on the step as on a moving danfo.
 ## Saves PNGs to user://danfo_views/.
 
 const Car = preload("res://scripts/car.gd")
@@ -70,6 +71,8 @@ func _run() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 3
 		car.occupants.fill_traffic(rng)
+		if args.has("moving") and car.occupants.conductor != null:
+			car.occupants.conductor.hold_on = true
 		await _frames(40)
 
 	_camera = Camera3D.new()
@@ -79,14 +82,15 @@ func _run() -> void:
 	var directory := "user://danfo_views/"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(directory))
 	# Car faces +Z; +X is the driver's side, -X the kerb side with the sliding door
-	var kerb := Vector3(-7.5, 1.6, 0.3)
+	var kerb := Vector3(-4.6, 1.3, -0.1)
 	var shots := []
 	match mode:
 		"door":
 			for n in 6:
 				shots.append([kerb, Vector3(0, 1.0, 0), float(n) / 5.0])
 		"inside":
-			shots = [[Vector3(-0.3, 4.2, 0.0), Vector3(0, 0.6, 0.0), -1.0], [Vector3(-2.6, 1.5, 0.0), Vector3(0.4, 1.0, 0.0), -1.0]]
+			# From the back of the van looking forward along the aisle, and in through the doorway
+			shots = [[Vector3(0.0, 1.55, -1.95), Vector3(0.0, 1.0, 1.2), -1.0], [Vector3(-2.4, 1.45, -0.1), Vector3(0.3, 1.0, -0.1), -1.0]]
 		_:
 			shots = [[kerb, Vector3(0, 1.0, 0), -1.0], [Vector3(-5.5, 2.2, 6.0), Vector3(0, 1.0, 0), -1.0], [Vector3(-5.5, 2.2, -6.0), Vector3(0, 1.0, 0), -1.0]]
 	var roof_hidden := mode == "inside"
@@ -105,7 +109,7 @@ func _run() -> void:
 		image.convert(Image.FORMAT_RGB8)
 		image.resize(CELL.x, CELL.y)
 		sheet.blit_rect(image, Rect2i(Vector2i.ZERO, CELL), Vector2i(n * CELL.x, 0))
-	var path := ProjectSettings.globalize_path(directory + "%s_%s%s.png" % [key, mode, "_filled" if filled else ""])
+	var path := ProjectSettings.globalize_path(directory + "%s_%s%s%s.png" % [key, mode, "_filled" if filled else "", "_moving" if args.has("moving") else ""])
 	sheet.save_png(path)
 	print("saved: ", path)
 	quit()

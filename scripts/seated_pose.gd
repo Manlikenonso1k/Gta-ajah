@@ -138,6 +138,10 @@ func _setup(vehicle_: Node3D, model_: Node3D, sk: Skeleton3D, loco_: RefCounted,
 	loco = loco_
 	driver = is_driver
 	clip = "Driving" if driver else "Sit_Idle"
+	# A passenger can bring their own seated clip (vehicle_occupants.gd picks
+	# it from the character's clip set)
+	if cabin.has("clip") and Locomotion.has_clip(cabin["clip"]):
+		clip = cabin["clip"]
 	seat = cabin.get("seat", Vector3(0.4, 0.6, 0.1))
 	heel = cabin.get("heel", seat + Vector3(0.0, -0.3, 0.8))
 	wheel_center = cabin.get("wheel_center", seat + Vector3(0, 0.3, 0.45))

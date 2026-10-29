@@ -211,6 +211,7 @@ func _try_enter_car() -> void:
 	_interaction_busy = true
 	interaction_state = InteractionState.APPROACHING_DOOR
 	velocity = Vector3.ZERO
+	_take_over(nearest)
 	_fade_out_action()
 	var arrived := false
 	for attempt in 3:
@@ -299,6 +300,18 @@ func _try_enter_car() -> void:
 		return
 	_take_driver_seat(nearest, seat_point)
 	_interaction_busy = false
+
+
+## Taking someone else's vehicle: traffic stops driving it, and anyone aboard
+## gets out (a danfo's driver and conductor shout at the player first).
+func _take_over(vehicle: Node3D) -> void:
+	if vehicle.is_in_group("traffic"):
+		var traffic := get_tree().get_first_node_in_group("traffic_manager")
+		if traffic != null:
+			traffic.release_car(vehicle)
+	var occupants: Node3D = vehicle.get("occupants")
+	if occupants != null and occupants.has_method("has_others") and occupants.has_others():
+		occupants.evict(self)
 
 
 ## The player becomes the car's driver: hidden on foot, controls go to the car.

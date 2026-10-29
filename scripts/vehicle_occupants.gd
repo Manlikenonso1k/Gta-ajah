@@ -18,6 +18,11 @@ const SeatedPose = preload("res://scripts/seated_pose.gd")
 const SteeringWheel = preload("res://scripts/steering_wheel.gd")
 const VehicleModel = preload("res://scripts/vehicle_model.gd")
 const Registry = preload("res://scripts/pedestrian_registry.gd")
+const AnimationSets = preload("res://scripts/animation_sets.gd")
+const Locomotion = preload("res://scripts/locomotion.gd")
+const Conductor = preload("res://scripts/conductor.gd")
+const Pedestrian = preload("res://scripts/pedestrian.gd")
+const Ragdoll = preload("res://scripts/ragdoll.gd")
 
 const FULL_DISTANCE := 40.0
 const HIDE_DISTANCE := 120.0
@@ -25,6 +30,13 @@ const HIDE_DISTANCE := 120.0
 const LOD_INTERVAL := 0.25
 ## Models that carry passengers when they drive in traffic (danfos and buses)
 const PASSENGER_MODELS := ["vw_t3", "hiace", "town_bus", "coach"]
+## Danfos run packed: this share of their seats is taken in traffic
+const DANFO_MODELS := ["vw_t3", "hiace"]
+const DANFO_FILL := Vector2(0.6, 1.0)
+## Seated clips that fit a tight bench (no crossed legs)
+const BENCH_CLIPS := ["mx/Sit_Talk", "mx/Sit_Laugh", "mx/Sit_Angry", "mx/Sit_Clap"]
+## After the player takes a danfo: how long the driver and conductor shout
+const SHOUT_TIME := 4.5
 const ENTER_BLEND := 0.35
 ## Registry picks tried before giving up on a driver who fits the car
 const DRIVER_PICKS := 8
@@ -35,6 +47,8 @@ var car: Node3D
 var cabin := {}
 var driver: RefCounted
 var passengers: Array = []
+## The danfo conductor (scripts/conductor.gd), or null
+var conductor: RefCounted
 var player_seated := false
 var lod := Lod.FULL
 ## The rim angle and steering fraction last posed (radians, -1..1)
@@ -59,6 +73,8 @@ static func attach(car_: Node3D, data: Dictionary) -> Node3D:
 	node.cabin = cabin_for(car_.model, data)
 	car_.add_child(node)
 	node.set_process(false)
+	if VehicleModel.cabin(car_.model).get("benches", false):
+		node._add_benches()
 	return node
 
 
@@ -150,6 +166,8 @@ func fill_traffic(rng: RandomNumberGenerator) -> void:
 	if car.model in PASSENGER_MODELS:
 		var seats: Array = cabin["passenger_seats"].duplicate()
 		var want := mini(rng.randi_range(2, 4), seats.size())
+		if car.model in DANFO_MODELS:
+			want = mini(ceili(seats.size() * rng.randf_range(DANFO_FILL.x, DANFO_FILL.y)), seats.size())
 		# Shuffle the free seats so danfos fill differently
 		for i in range(seats.size() - 1, 0, -1):
 			var j := rng.randi_range(0, i)
@@ -158,6 +176,16 @@ func fill_traffic(rng: RandomNumberGenerator) -> void:
 			seats[j] = swap
 		for i in want:
 			add_passenger(Registry.choose(rng), seats[i])
+	var points: Dictionary = VehicleModel.cabin(car.model).get("conductor", {})
+	if not points.is_empty():
+		for i in DRIVER_PICKS:
+			var entry := Registry.choose(rng)
+			var model := _instance(entry) if entry.get("gender", "") == "male" else null
+			if model != null:
+				conductor = Conductor.create(car, model, entry, points)
+				if conductor != null:
+					break
+		set_process(true)
 	_refresh_lod(true)
 
 
@@ -191,6 +219,7 @@ func add_passenger(entry: Dictionary, seat: Vector3) -> bool:
 	seat_cabin["seat"] = seat
 	seat_cabin["heel"] = seat + Vector3(0.0, -float(cabin.get("passenger_heel_drop", 0.42)), 0.45)
 	seat_cabin["recline"] = deg_to_rad(12.0)
+	seat_cabin["clip"] = _bench_clip(entry)
 	var pose := SeatedPose.create(car, model, seat_cabin, false)
 	if pose == null:
 		model.free()
@@ -199,6 +228,59 @@ func add_passenger(entry: Dictionary, seat: Vector3) -> bool:
 	passengers.append(pose)
 	set_process(true)
 	return true
+
+
+## The character's own seated clip if it suits a tight bench, else one of
+## BENCH_CLIPS, else the default (seated_pose.gd).
+func _bench_clip(entry: Dictionary) -> String:
+	var own: String = AnimationSets.pick(entry.get("id", ""), entry.get("gender", ""), entry.get("tags", [])).get("sit", "")
+	if BENCH_CLIPS.has(own):
+		return own
+	var loaded := BENCH_CLIPS.filter(func(name: String) -> bool: return Locomotion.has_clip(name))
+	return loaded[hash(entry.get("id", "")) % loaded.size()] if not loaded.is_empty() else ""
+
+
+## Simple bench seats under the passenger seats: one bench per row of seats
+## (seats at the same z) with a cushion, base and backrest in dark vinyl.
+func _add_benches() -> void:
+	var raw: Dictionary = VehicleModel.cabin(car.model)
+	var rows := {}
+	for p: Array in raw.get("passengers", []):
+		var z := snappedf(float(p[2]), 0.01)
+		if not rows.has(z):
+			rows[z] = []
+		rows[z].append(Vector3(p[0], p[1], p[2]))
+	var vinyl := Ragdoll.material(Color(0.12, 0.11, 0.1))
+	var frame := Ragdoll.material(Color(0.3, 0.3, 0.32))
+	var drop := float(raw.get("passenger_heel_drop", 0.42))
+	for z: float in rows:
+		var row: Array = rows[z]
+		var lo := INF
+		var hi := -INF
+		var y := 0.0
+		for seat: Vector3 in row:
+			lo = minf(lo, seat.x)
+			hi = maxf(hi, seat.x)
+			y = seat.y
+		var width := hi - lo + 0.44
+		var middle := (lo + hi) / 2.0
+		var cushion := y - 0.15
+		var floor_y := y - drop
+		_bench_box(Vector3(width, 0.09, 0.44), Vector3(middle, cushion, z - 0.02), vinyl)
+		_bench_box(Vector3(width - 0.1, cushion - floor_y - 0.045, 0.36), Vector3(middle, (cushion + floor_y) / 2.0, z - 0.04), frame)
+		_bench_box(Vector3(width, 0.5, 0.07), Vector3(middle, cushion + 0.28, z - 0.25), vinyl)
+
+
+func _bench_box(size: Vector3, center: Vector3, material: Material) -> void:
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	mesh.material_override = material
+	mesh.position = center
+	mesh.visibility_range_end = HIDE_DISTANCE
+	mesh.name = "Bench"
+	car.add_child(mesh)
 
 
 ## Everyone seated (driver first).
@@ -342,6 +424,8 @@ func _process(delta: float) -> void:
 	_pose_driver(delta)
 	for p: RefCounted in passengers:
 		p.pose(0.0, 0.0, delta)
+	if conductor != null:
+		conductor.update(delta)
 
 
 func _pose_driver(delta: float) -> void:
@@ -364,7 +448,7 @@ func _read_steering() -> void:
 
 ## Chooses the LOD level from the camera distance and traffic's detail flag.
 func _refresh_lod(force: bool) -> void:
-	if people().is_empty():
+	if people().is_empty() and conductor == null:
 		return
 	var wanted := Lod.FULL
 	if player_seated:
@@ -383,6 +467,8 @@ func _refresh_lod(force: bool) -> void:
 	lod = wanted
 	for p: RefCounted in people():
 		p.seat_node.visible = lod != Lod.HIDDEN
+	if conductor != null:
+		conductor.model.visible = lod != Lod.HIDDEN
 	if lod == Lod.FIXED:
 		# A still seated pose with the wheel centred
 		if _wheel == null:
@@ -406,3 +492,65 @@ func _instance(entry: Dictionary) -> Node3D:
 	for mesh: GeometryInstance3D in model.find_children("*", "GeometryInstance3D", true, false):
 		mesh.visibility_range_end = HIDE_DISTANCE
 	return model
+
+
+# --- the player taking an occupied danfo --------------------------------------
+
+## True when anyone other than the player is aboard.
+func has_others() -> bool:
+	return (driver != null and not player_seated) or not passengers.is_empty() or conductor != null
+
+
+## Empties the vehicle for the player at `player_node`: passengers climb out
+## and walk off; the driver and the conductor get out, shout at the player
+## (Angry) for a few seconds, then walk away. They become ordinary placed
+## pedestrians (pedestrian.gd loop_path) that remove themselves at the end.
+func evict(player_node: Node3D) -> void:
+	var world := car.get_parent()
+	var points: Dictionary = VehicleModel.cabin(car.model).get("conductor", {})
+	var ground: Array = points.get("ground", [-1.4, 0.0, 0.0])
+	var door: Vector3 = car.to_global(Vector3(ground[0], ground[1], ground[2]))
+	var away_dir := door - car.global_position
+	away_dir.y = 0.0
+	away_dir = away_dir.normalized()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(car.get_instance_id())
+	var n := 0
+	for p: RefCounted in passengers:
+		var id: String = p.model.get_meta("character_id", "")
+		var start: Vector3 = door + car.global_basis.z * rng.randf_range(-1.2, 1.2)
+		var away: Vector3 = start + away_dir.rotated(Vector3.UP, rng.randf_range(-0.8, 0.8)) * rng.randf_range(10.0, 16.0)
+		_leave(world, id, [{"p": start, "wait": 0.4 + n * 0.35}, {"p": away, "free": true}], {}, rng)
+		p.release().free()
+		n += 1
+	passengers.clear()
+	var angry: Array = []
+	if driver != null and not player_seated:
+		angry.append([driver.model.get_meta("character_id", ""), car.to_global(Vector3(1.5, 0.0, 0.8))])
+		driver.release().free()
+		driver = null
+	if conductor != null:
+		angry.append([conductor.character_id, door])
+		conductor.release().free()
+		conductor = null
+	for a: Array in angry:
+		var stand: Vector3 = a[1]
+		var out := stand - car.global_position
+		out.y = 0.0
+		var away: Vector3 = stand + out.normalized() * 14.0
+		_leave(world, a[0], [{"p": stand, "wait": SHOUT_TIME, "face": player_node}, {"p": away, "free": true}], {"idle": "mx/Angry"}, rng)
+	_refresh_lod(true)
+
+
+func _leave(world: Node, id: String, loop: Array, clips: Dictionary, rng: RandomNumberGenerator) -> void:
+	var entry := Registry.by_id(id)
+	if entry.is_empty():
+		return
+	var ped = Pedestrian.from_entry(entry, rng)
+	ped.anchor_state = "idle"
+	ped.clip_overrides = clips
+	ped.loop_path = loop
+	ped.position = loop[0].p
+	world.add_child(ped)
+	ped.add_to_group("pedestrians")
+	ped.add_to_group("evicted_people")

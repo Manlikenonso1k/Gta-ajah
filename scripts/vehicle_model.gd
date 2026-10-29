@@ -38,7 +38,8 @@ static var _config := {}
 
 
 ## Returns {"body": [[Mesh, Transform3D]], "wheels": [{"center", "radius",
-## "front", "parts": [[Mesh, Transform3D]]}], "body_aabb": AABB, "mass": float}.
+## "front", "parts": [[Mesh, Transform3D]]}], "body_aabb": AABB, "mass": float},
+## plus "sliding_door": {"parts", "open_offset": Vector3} for vans with one.
 ## Wheel part transforms are relative to the wheel centre.
 static func build(key: String, source_dir: String = "") -> Dictionary:
 	var cfg: Dictionary = MODELS[key]
@@ -135,6 +136,17 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 	var sw_node: String = str(cab.get("wheel_node", ""))
 	var sw_cut: bool = str(cab.get("wheel_source", "")) == "cut"
 	var sw_parts := []
+	# Sliding door (vehicles.json "sliding_door"): the side skin inside the box
+	# becomes its own part so it can slide open
+	var door_cfg: Dictionary = _config.get(key, {}).get("sliding_door", {})
+	var door_box := AABB()
+	if not door_cfg.is_empty():
+		var lo := Vector3(door_cfg["min"][0], door_cfg["min"][1], door_cfg["min"][2])
+		door_box = AABB(lo, Vector3(door_cfg["max"][0], door_cfg["max"][1], door_cfg["max"][2]) - lo)
+	var door_parts := []
+	# A hollow body seen through an open door shows its far side's back faces
+	var double_sided: bool = _config.get(key, {}).get("double_sided", false)
+	var double_cache := {}
 
 	# Pass 2: classify by triangle centre. Requiring all three vertices to fit
 	# the cylinder clipped broad, low-poly tread faces and left rear tyres partial.
@@ -151,6 +163,8 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 				tags[vi] = -1
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(pts.size()))
 		var groups := [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
+		var clip_body := []
+		var clip_door := []
 		var whole_mesh_is_steering := sw_cut and not sw_node.is_empty() and _has_named_ancestor(m, model, sw_node.to_lower())
 		for t in range(0, indices.size() - 2, 3):
 			var a := indices[t]
@@ -163,6 +177,11 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 				var steering_group: PackedInt32Array = groups[5]
 				steering_group.append_array(PackedInt32Array([a, b, c3]))
 				groups[5] = steering_group
+				continue
+			# Side-skin triangles near the door are clipped along its edges: the
+			# piece inside becomes the door, the rest stays on the body
+			if door_box.has_volume() and _in_slab(pts, [a, b, c3], door_box):
+				_cut_door([_vertex(arrays, pts, a), _vertex(arrays, pts, b), _vertex(arrays, pts, c3)], door_box, clip_body, clip_door)
 				continue
 			var centroid := (pts[a] + pts[b] + pts[c3]) / 3.0
 			var g := _wheel_at(centroid, centers, reach)
@@ -191,6 +210,16 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 			if not glass_cache.has(material):
 				glass_cache[material] = _see_through(material, float(glass[material.resource_name]))
 			material = glass_cache[material]
+		if double_sided and material is BaseMaterial3D:
+			if not double_cache.has(material):
+				var both := (material as BaseMaterial3D).duplicate() as BaseMaterial3D
+				both.cull_mode = BaseMaterial3D.CULL_DISABLED
+				double_cache[material] = both
+			material = double_cache[material]
+		if not clip_body.is_empty():
+			body.append([_polygon_mesh(clip_body, arrays, material), xf])
+		if not clip_door.is_empty():
+			door_parts.append([_polygon_mesh(clip_door, arrays, material), xf])
 		for g in 6:
 			if groups[g].is_empty():
 				continue
@@ -216,6 +245,9 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 		wheels.append({"center": hubs[i], "radius": radius, "front": i < 2, "parts": wheel_parts[i]})
 	var result := {"body": body, "wheels": wheels, "body_aabb": all_body, "mass": float(cfg["mass"]), "handling": cfg.get("handling", {}),
 		"source_path": model_path, "source_transform": to_car}
+	if not door_parts.is_empty():
+		var slide: Array = door_cfg.get("open_offset", [0.0, 0.0, -1.0])
+		result["sliding_door"] = {"parts": door_parts, "open_offset": Vector3(slide[0], slide[1], slide[2])}
 	if not cab.is_empty():
 		if str(cab.get("wheel_source", "")) == "added":
 			sw_parts = [[_low_poly_steering_wheel(cab), Transform3D.IDENTITY]]
@@ -300,6 +332,90 @@ static func _low_poly_steering_wheel(cab: Dictionary) -> ArrayMesh:
 
 ## Index of the wheel whose cylinder (axle along X) contains `p`, or -1.
 ## `centers` hold the side (+1/-1) in x, since the track isn't known yet.
+## True when the triangle lies in the door box's thickness (its x range): the
+## van's side skin there, whether or not it crosses the door's outline.
+static func _in_slab(pts: PackedVector3Array, tri: Array, box: AABB) -> bool:
+	for i: int in tri:
+		if pts[i].x < box.position.x or pts[i].x > box.end.x:
+			return false
+	return true
+
+
+## One vertex for clipping: car-space position "p" and the source mesh's own
+## position, normal and UV.
+static func _vertex(arrays: Array, pts: PackedVector3Array, i: int) -> Dictionary:
+	var normals: Variant = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: Variant = arrays[Mesh.ARRAY_TEX_UV]
+	return {"p": pts[i], "v": (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array)[i],
+		"n": (normals as PackedVector3Array)[i] if normals != null else Vector3.UP,
+		"uv": (uvs as PackedVector2Array)[i] if uvs != null else Vector2.ZERO}
+
+
+static func _lerp_vertex(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
+	return {"p": (a.p as Vector3).lerp(b.p, t), "v": (a.v as Vector3).lerp(b.v, t),
+		"n": (a.n as Vector3).lerp(b.n, t).normalized(), "uv": (a.uv as Vector2).lerp(b.uv, t)}
+
+
+## Splits a convex polygon by the plane where component `axis` equals
+## `value`: [the part below, the part above].
+static func _split(poly: Array, axis: int, value: float) -> Array:
+	var below := []
+	var above := []
+	for i in poly.size():
+		var a: Dictionary = poly[i]
+		var b: Dictionary = poly[(i + 1) % poly.size()]
+		var da: float = (a.p as Vector3)[axis] - value
+		var db: float = (b.p as Vector3)[axis] - value
+		if da <= 0.0:
+			below.append(a)
+		if da >= 0.0:
+			above.append(a)
+		if (da < 0.0 and db > 0.0) or (da > 0.0 and db < 0.0):
+			var middle := _lerp_vertex(a, b, da / (da - db))
+			below.append(middle)
+			above.append(middle)
+	return [below, above]
+
+
+## Cuts a triangle along the door's four edges (z and y): what lies inside
+## goes to `door`, the pieces outside to `body` (convex polygons).
+static func _cut_door(poly: Array, box: AABB, body: Array, door: Array) -> void:
+	var rest := poly
+	for cut in [[2, box.position.z, true], [2, box.end.z, false], [1, box.position.y, true], [1, box.end.y, false]]:
+		var halves := _split(rest, cut[0], cut[1])
+		var outside: Array = halves[0] if cut[2] else halves[1]
+		rest = halves[1] if cut[2] else halves[0]
+		if outside.size() >= 3:
+			body.append(outside)
+		if rest.size() < 3:
+			return
+	door.append(rest)
+
+
+## Triangle-fan mesh from convex polygons, in the source mesh's own space.
+static func _polygon_mesh(polys: Array, arrays: Array, material: Material) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for poly: Array in polys:
+		for i in range(1, poly.size() - 1):
+			for corner: Dictionary in [poly[0], poly[i], poly[i + 1]]:
+				verts.append(corner.v)
+				normals.append(corner.n)
+				uvs.append(corner.uv)
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = normals
+	if arrays[Mesh.ARRAY_TEX_UV] != null:
+		out[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	if material != null:
+		mesh.surface_set_material(0, material)
+	return mesh
+
+
 static func _wheel_at(p: Vector3, centers: Array[Vector3], reach: float) -> int:
 	if p.y > centers[0].y + reach:
 		return -1

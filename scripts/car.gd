@@ -50,6 +50,11 @@ var _traction_blend := 1.0
 var _driven_contact_ratio := 1.0
 var _wheelbase := 2.6
 var _steering_wheel: Node3D
+## Danfo sliding door (vehicle_model.gd "sliding_door"): its node and how far
+## it moves when fully open
+var _sliding_door: Node3D
+var _door_open_offset := Vector3.ZERO
+var sliding_door_open := 0.0
 ## People in the car (scripts/vehicle_occupants.gd): AI drivers and passengers
 ## from traffic.gd, or the seated player. Empty for parked cars.
 var occupants: Node3D
@@ -74,6 +79,15 @@ func _ready() -> void:
 
 	for part in data["body"]:
 		add_child(_mesh_instance(part))
+	if data.has("sliding_door"):
+		_sliding_door = Node3D.new()
+		_sliding_door.name = "SlidingDoor"
+		for part in data["sliding_door"]["parts"]:
+			_sliding_door.add_child(_mesh_instance(part))
+		_door_open_offset = data["sliding_door"]["open_offset"]
+		add_child(_sliding_door)
+		# Danfos drive with the sliding door open
+		set_sliding_door(1.0)
 	_steering_wheel = SteeringWheel.attach(self, data)
 	if data.has("driver_seat"):
 		_cabin_seat = data["driver_seat"]
@@ -370,6 +384,21 @@ func _on_bumper_body_entered(body: Node3D) -> void:
 			body.hit_by_vehicle(linear_velocity, global_position, mass)
 		else:
 			body.hit_by_vehicle(linear_velocity)
+
+
+## Sliding door position, 0 closed to 1 open: it first steps out from the body,
+## then slides back along it.
+func set_sliding_door(amount: float) -> void:
+	sliding_door_open = clampf(amount, 0.0, 1.0)
+	if _sliding_door == null:
+		return
+	var out := smoothstep(0.0, 0.2, sliding_door_open)
+	var back := smoothstep(0.15, 1.0, sliding_door_open)
+	_sliding_door.position = Vector3(_door_open_offset.x * out, _door_open_offset.y * back, _door_open_offset.z * back)
+
+
+func has_sliding_door() -> bool:
+	return _sliding_door != null
 
 
 func _mesh_instance(part: Array) -> MeshInstance3D:
