@@ -15,6 +15,7 @@ const BASE_MASS := 1200.0
 const VehicleModel = preload("res://scripts/vehicle_model.gd")
 const Ragdoll = preload("res://scripts/ragdoll.gd")
 const SteeringWheel = preload("res://scripts/steering_wheel.gd")
+const VehicleOccupants = preload("res://scripts/vehicle_occupants.gd")
 
 ## Key into VehicleModel.MODELS
 var model := "corolla"
@@ -49,6 +50,13 @@ var _traction_blend := 1.0
 var _driven_contact_ratio := 1.0
 var _wheelbase := 2.6
 var _steering_wheel: Node3D
+## People in the car (scripts/vehicle_occupants.gd): AI drivers and passengers
+## from traffic.gd, or the seated player. Empty for parked cars.
+var occupants: Node3D
+## Measured driver hip point from vehicles.json (the seated pose); _driver_seat
+## below stays the physics/door reference it always was
+var _cabin_seat := Vector3.ZERO
+var _has_cabin := false
 
 
 func _ready() -> void:
@@ -67,6 +75,10 @@ func _ready() -> void:
 	for part in data["body"]:
 		add_child(_mesh_instance(part))
 	_steering_wheel = SteeringWheel.attach(self, data)
+	if data.has("driver_seat"):
+		_cabin_seat = data["driver_seat"]
+		_has_cabin = true
+	occupants = VehicleOccupants.attach(self, data)
 	_setup_door_rig(data)
 
 	# Collision box follows the body, raised a little so it doesn't scrape the
@@ -128,6 +140,10 @@ func start_driving(new_driver: Node) -> void:
 	driver = new_driver
 	_target_driver_weight = 75.0
 	_exit_pending = false
+	if occupants != null and occupants.player_seated:
+		# The realistic player is already seated with hands on the wheel
+		return
+	# Fallback for a player without a realistic model: the procedural driver
 	_driver_visual = Node3D.new()
 	_driver_visual.position = _driver_seat
 	_driver_visual.scale = Vector3.ONE * 0.55
@@ -138,6 +154,9 @@ func start_driving(new_driver: Node) -> void:
 
 
 func driver_door_point() -> Vector3:
+	# Beside the measured driver's seat (the front door on vans and buses)
+	if _has_cabin:
+		return Vector3(_half_width + 0.62, 0.0, _cabin_seat.z + 0.1)
 	return Vector3(_half_width + 0.62, 0.0, _driver_seat.z * 0.5)
 
 
@@ -269,7 +288,9 @@ func _physics_process(delta: float) -> void:
 	var speed_limit: float = _handling.get("top_speed", TOP_SPEED)
 	var steer_target := steer_input * lerpf(max_steer, max_steer * 0.36, clampf(speed / 30.0, 0, 1)) * _traction_blend
 	steering = move_toward(steering, steer_target, float(_handling.get("steer_response", 2.0)) * delta)
-	SteeringWheel.update(_steering_wheel, steering, max_steer)
+	# The rim only turns while its occupants are in full detail (within ~40 m)
+	if occupants == null or occupants.wheel_live():
+		SteeringWheel.update(_steering_wheel, steering, max_steer)
 	var gears: Array = _handling.get("gears", [1.0])
 	var ratios: Array = _handling.get("ratios", [1.0])
 	_shift_timer = maxf(0.0, _shift_timer - delta)

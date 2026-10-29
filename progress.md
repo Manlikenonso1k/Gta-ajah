@@ -12,7 +12,7 @@ Last updated 2026-10-29. Last commit: `29fc3c3`. Read this first, then README.md
 | Task 3: traffic and pavements | Done, committed |
 | Task 4 steps 1–2: steering-wheel/seat data, player model | Done, committed |
 | Arm fix (forearms raised on every model except Nathan) | Done, committed (`29fc3c3`) |
-| **Task 4 steps 3–5 (Phase 2)** | **In progress, uncommitted, not verified** |
+| **Task 4 steps 3–5 (Phase 2)** | **In progress, not verified. Committed as-is in the save point tagged `save-point-for-codex`** |
 
 Commits since the team started:
 
@@ -29,7 +29,7 @@ At `29fc3c3` the full suite passed: 11/11 tests, 0 errors, 0 warnings (headless 
 
 ## Next: finish Phase 2 (Task 4 steps 3–5)
 
-Spec: `prompt-4-player-and-drivers.md`, steps 3–5. A previous agent was building it and stopped mid-work. Its changes are uncommitted in the working tree:
+Spec: `prompt-4-player-and-drivers.md`, steps 3–5. A previous agent was building it and stopped mid-work. Its unfinished changes are committed in the save point (tag `save-point-for-codex`) so nothing is lost; treat them as work in progress, not as passing code:
 
 | File | What it is |
 |---|---|
@@ -54,11 +54,11 @@ What Phase 2 must still deliver and prove (from the spec):
 - Renders with `tests/view_driver.gd` for a sedan, the danfo, the Sprinter and the coach at full left, centre and full right, outside and from the driving camera. **Inspect from front, side and 3/4**: the arm problem below was missed because only side views were checked.
 - Profile High and Low before and after, with all traffic drivers visible.
 
-Then run the whole suite, commit only Phase 2 files with `git add <files>` (never `git add -A`), update README's Progress log and `docs/TEAM_TASKS.md` (V3–V5).
+Then run the whole suite, commit the fixes with `git add <files>` (never `git add -A`), update README's Progress log and `docs/TEAM_TASKS.md` (V3–V5).
 
 ## Decide before committing
 
-- **`assets/animations/mixamo/`** (7 `.fbx` clips, untracked, nothing references them). Mixamo's terms don't allow the clip files in a public repo, and Task 2 rejected Mixamo for that reason. Don't commit them. Ask the owner whether they put them there; if they're kept locally, add `assets/animations/mixamo/` to `.gitignore`.
+- **`assets/animations/mixamo/`** (7 `.fbx` clips on the owner's disk, nothing references them) is git-ignored: Mixamo's terms don't allow the clip files in a public repo, and Task 2 rejected Mixamo for that reason. Don't commit or depend on them.
 - Optional: the starter car in `scripts/main.gd` sits ~0.3 m into a driving lane (`road_line(3)+3`; `+4.8` clears it).
 
 ## Machine setup (Windows 10)

@@ -314,7 +314,9 @@ _subresources={{
 "nodes": {{
 "PATH:PLAYER_rig/Skeleton3D": {{
 "retarget/bone_map": {bone_map}
-
+,
+"retarget/rest_fixer/fix_silhouette/enable": true,
+"retarget/rest_fixer/fix_silhouette/threshold": 1.0
 }}
 }}
 }}

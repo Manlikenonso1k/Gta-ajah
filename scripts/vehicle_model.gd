@@ -121,6 +121,10 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 	# Steering wheel: a thin disc around the measured rim (see cabin()), or every
 	# triangle of a named mesh when the model has one.
 	var cab := cabin(key)
+	# Some models paint their windows opaque, which hides the people inside:
+	# vehicles.json "glass" names those materials and the alpha to give them
+	var glass: Dictionary = _config.get(key, {}).get("glass", {})
+	var glass_cache := {}
 	var sw_center: Vector3 = cab.get("wheel_center", Vector3.ZERO)
 	# Right-hand-drive models: cut the wheel where it is modelled and mount it
 	# at wheel_center on the game's driver (+X) side.
@@ -183,6 +187,10 @@ static func build(key: String, source_dir: String = "") -> Dictionary:
 			group.push_back(c3)
 			groups[g] = group
 		var material := _material(m, entry[1])
+		if material != null and glass.has(material.resource_name):
+			if not glass_cache.has(material):
+				glass_cache[material] = _see_through(material, float(glass[material.resource_name]))
+			material = glass_cache[material]
 		for g in 6:
 			if groups[g].is_empty():
 				continue
@@ -316,6 +324,17 @@ static func _has_named_ancestor(n: Node, root: Node, token: String) -> bool:
 			return true
 		n = n.get_parent()
 	return false
+
+
+## A copy of an opaque window material that lets the cabin show through.
+static func _see_through(material: Material, alpha: float) -> Material:
+	if not material is BaseMaterial3D:
+		return material
+	var glass := (material as BaseMaterial3D).duplicate() as BaseMaterial3D
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.albedo_color.a = alpha
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return glass
 
 
 static func _material(m: MeshInstance3D, surface: int) -> Material:

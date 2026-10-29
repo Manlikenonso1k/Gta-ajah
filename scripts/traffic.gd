@@ -96,6 +96,12 @@ func spawn_car(lane: int, distance: float, model: String, reckless: bool) -> Veh
 	var forward: Vector3 = _graph.lanes[lane].dir
 	car.transform = Transform3D(Basis(Vector3.UP, atan2(forward.x, forward.z)), _graph.lane_point(lane, distance) + Vector3.UP * 0.65)
 	_world.add_child(car)
+	# Task 4 (vehicles): a driver from the pedestrian registry (same 90/10 mix)
+	# and, in danfos, a few passengers; see scripts/vehicle_occupants.gd
+	if car.occupants != null:
+		var people_rng := RandomNumberGenerator.new()
+		people_rng.seed = 5000 + _spawned
+		car.occupants.fill_traffic(people_rng)
 	car.add_to_group("traffic")
 	car.set_meta("traffic_detail", true)
 	car.tree_exiting.connect(_forget.bind(driver))
