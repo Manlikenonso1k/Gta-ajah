@@ -9,7 +9,9 @@ extends RefCounted
 ##
 ## Hooked from pedestrian.gd: `navigation = PedestrianNavigation.new(self)` in
 ## _ready() and `navigation.physics_step(delta)` before move_and_slide(). It
-## sets only velocity.x/z, then calls set_locomotion(speed, state, facing).
+## sets velocity.x/z, then calls set_locomotion(speed, state, facing) (animator's
+## entry point, which turns the body and drives the animation); a pedestrian
+## without that method has its rotation.y set here instead.
 
 const City = preload("res://scripts/city.gd")
 const RoadGraph = preload("res://scripts/road_graph.gd")
@@ -113,6 +115,14 @@ func physics_step(delta: float) -> void:
 			state = "run"
 			if _timer <= 0.0:
 				_plan_from(graph.nearest_node(ped.global_position), false)
+	# Containment: a walker that ends up off the pavement (shoved by a car, or
+	# returning after a flee) heads straight back to the nearest kerb rather than
+	# across a road. Crossing and fleeing are the only sanctioned road excursions.
+	if mode != Mode.CROSS and mode != Mode.FLEE:
+		var back := _toward_pavement(ped.global_position)
+		if back != Vector3.ZERO:
+			move = back * run_speed
+			state = "run"
 	if move.length_squared() > 0.01:
 		facing = Vector3(move.x, 0.0, move.z).normalized()
 	_check_stuck(delta, move)
@@ -120,10 +130,13 @@ func physics_step(delta: float) -> void:
 	ped.velocity.z = move.z
 	current_speed = Vector2(move.x, move.z).length()
 	current_state = state
+	# set_locomotion(speed, state, facing) is animator's entry point: it turns the
+	# body toward `facing` and drives the animation. A pedestrian without it (a
+	# test harness, or before animator's integration) falls back to turning here.
 	if ped.has_method("set_locomotion"):
 		ped.set_locomotion(current_speed, state, facing)
 	elif facing.length_squared() > 0.01:
-		ped.rotation.y = lerp_angle(ped.rotation.y, atan2(-facing.x, -facing.z), 6.0 * delta)
+		ped.rotation.y = lerp_angle(ped.rotation.y, atan2(-facing.x, -facing.z), 8.0 * delta)
 
 
 func _plan_from(node: int, first: bool) -> void:
@@ -144,6 +157,24 @@ func _plan_from(node: int, first: bool) -> void:
 		_index = 0
 
 
+## Unit direction from `p` straight back onto the nearest block (pavement), or
+## ZERO when already comfortably on a block. Pushes until 0.5 m inside the edge
+## so a returning walker doesn't oscillate on the kerb line.
+func _toward_pavement(p: Vector3) -> Vector3:
+	var push := Vector3.ZERO
+	var axes := [p.x, p.z]
+	for idx in 2:
+		var v: float = axes[idx]
+		var cell := roundf(v / City.PITCH + (City.GRID - 1) / 2.0)
+		var center := (cell - (City.GRID - 1) / 2.0) * City.PITCH
+		if absf(v - center) > City.BLOCK / 2.0 - 0.5:
+			if idx == 0:
+				push.x = signf(center - v)
+			else:
+				push.z = signf(center - v)
+	return push.normalized() if push.length_squared() > 0.0 else Vector3.ZERO
+
+
 func _segment_right() -> Vector3:
 	var to: Vector3 = graph.points[_path[_index]]
 	var from: Vector3 = graph.points[_from_node] if _from_node >= 0 else ped.global_position
@@ -161,6 +192,11 @@ func _walk(delta: float) -> Vector3:
 	_shift = move_toward(_shift, _shift_target, 1.5 * delta)
 	var node := _path[_index]
 	var target: Vector3 = graph.points[node] + _segment_right() * (KEEP_RIGHT + _shift)
+	# If physically off the pavement (just after fleeing or a crossing), aim
+	# straight at the node, which sits well inside the kerb, rather than hugging
+	# the kerb-side walking line. This pulls a displaced walker back promptly.
+	if not City.on_block(ped.global_position, -0.1):
+		target = graph.points[node]
 	var to_target := target - ped.global_position
 	to_target.y = 0.0
 	if to_target.length() < 0.5:
