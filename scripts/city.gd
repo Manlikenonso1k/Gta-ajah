@@ -21,6 +21,19 @@ const PARK_OFFSET := ROAD / 2.0 - 1.2
 const PAVEMENT_WIDTH := 2.9
 const PAVEMENT_INSET := 1.5
 
+## Building lots kept empty for scripts/street_places.gd, by block (i, j):
+## lot offsets (lx, lz), each -1 or 1. The flyover spans road 1 at row 3;
+## the market and supermarket face the start block; the clinic faces them
+## across road 3.
+const RESERVED_LOTS := {
+	Vector2i(0, 3): [Vector2i(1, -1), Vector2i(1, 1)],
+	Vector2i(1, 3): [Vector2i(-1, -1), Vector2i(-1, 1)],
+	Vector2i(2, 1): [Vector2i(-1, 1), Vector2i(1, 1)],
+	Vector2i(3, 1): [Vector2i(-1, 1)],
+}
+## Lot centres sit this far from their block's centre on each axis
+const LOT_OFFSET := 9.5
+
 const BUILDING_COLORS := [
 	Color(0.92, 0.88, 0.78), Color(0.78, 0.45, 0.32), Color(0.65, 0.75, 0.82),
 	Color(0.85, 0.72, 0.45), Color(0.9, 0.9, 0.88), Color(0.6, 0.68, 0.55),
@@ -71,9 +84,18 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 			_box(chunk, Vector3(BLOCK, 0.1, BLOCK), c + Vector3(0, 0.05, 0), Color(0.62, 0.6, 0.56), false)
 			for lx in [-1, 1]:
 				for lz in [-1, 1]:
-					var lot := c + Vector3(lx * 9.5, 0, lz * 9.5)
+					var lot := c + Vector3(lx * LOT_OFFSET, 0, lz * LOT_OFFSET)
+					var reserved: bool = RESERVED_LOTS.get(Vector2i(i, j), []).has(Vector2i(lx, lz))
 					if rng.randf() < 0.8:
-						_building(chunk, lot, rng)
+						if reserved:
+							# Draw what _building would, so the rest of the city is unchanged
+							for n in 3:
+								rng.randf()
+							rng.randi()
+						else:
+							_building(chunk, lot, rng)
+					elif reserved:
+						rng.randf()
 					else:
 						_palm(chunk, lot, rng)
 			for n in 6:

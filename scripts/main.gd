@@ -7,6 +7,7 @@ const CameraRig = preload("res://scripts/camera_rig.gd")
 const Player = preload("res://scripts/player.gd")
 const Car = preload("res://scripts/car.gd")
 const Pedestrian = preload("res://scripts/pedestrian.gd")
+const StreetPlaces = preload("res://scripts/street_places.gd")
 const PedestrianRegistry = preload("res://scripts/pedestrian_registry.gd")
 const TouchControls = preload("res://scripts/touch_controls.gd")
 const TouchControlsScene = preload("res://scenes/touch_controls.tscn")
@@ -68,26 +69,7 @@ func _ready() -> void:
 	var points: Array = spawns["sidewalk"]
 	var walkers := mini(quality["pedestrians"], points.size())
 	for i in walkers:
-		var ped := Pedestrian.new()
-		var character: Dictionary = PedestrianRegistry.choose(rng)
-		ped.character_id = character.id
-		ped.character_display_name = character.display_name
-		ped.model_path = character.model_path
-		ped.appearance_category = character.appearance_category
-		ped.outfit_id = character.outfit_id
-		ped.character_scale = float(character.get("scale", 1.0))
-		ped.collision_radius = float(character.get("collision_radius", 0.3))
-		ped.collision_height = float(character.get("collision_height", 1.8))
-		if str(character.model_path).begins_with("res://"):
-			var model_resource: Resource = load(character.model_path)
-			if model_resource is PackedScene:
-				ped.model_scene = model_resource
-		ped.colors = Ragdoll.random_colors(rng)
-		# The knocked-down ragdoll is still the procedural body; at least match the skin
-		if character.appearance_category == "black_african":
-			ped.colors["skin"] = Color(0.24, 0.14, 0.09).lerp(Color(0.36, 0.22, 0.14), rng.randf())
-		elif character.appearance_category == "white":
-			ped.colors["skin"] = Color(0.85, 0.68, 0.58)
+		var ped = Pedestrian.from_entry(PedestrianRegistry.choose(rng), rng)
 		ped.position = points[i * points.size() / walkers]
 		ped.wander_origin = ped.position
 		add_child(ped)
@@ -100,6 +82,7 @@ func _ready() -> void:
 	var traffic := Traffic.new()
 	add_child(traffic)
 	traffic.setup(self, int(quality.get("traffic", 2)))
+	_build_places(float(quality.get("pedestrians", 30)) / 30.0)
 
 	_setup_hud(rig)
 	_update_streaming()
@@ -168,6 +151,21 @@ func _vehicle_overlaps_static(car: Node3D) -> bool:
 	query.collision_mask = 1
 	query.exclude = [car.get_rid()]
 	return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+## The street-life places (scripts/street_places.gd). Built last, with their
+## own random numbers, so the rest of the city and its people are unchanged.
+func _build_places(people_share: float) -> void:
+	# For measuring: godot --path . -- --no-places
+	if OS.get_cmdline_user_args().has("--no-places"):
+		return
+	var chunk_map := {}
+	for chunk: Node3D in _chunks:
+		var parts := String(chunk.name).split("_")
+		chunk_map[Vector2i(int(parts[1]), int(parts[2]))] = chunk
+	var places_rng := RandomNumberGenerator.new()
+	places_rng.seed = 5150
+	StreetPlaces.build(self, get_node("City"), chunk_map, places_rng, people_share)
 
 
 func _update_streaming() -> void:

@@ -28,6 +28,7 @@ const Registry = preload("res://scripts/pedestrian_registry.gd")
 ## otherwise slide the feet.
 const SPEED := 1.25
 const VISIBLE_DISTANCE := 120.0
+const BAG_MODEL := "res://assets/models/buildings/carry_bag.glb"
 ## Real legs need about 1.8 steps per second at walking speed; the phase
 ## below was tuned for the stick figure's shorter stride
 const WALK_CADENCE := 1.8
@@ -36,6 +37,9 @@ const WALK_CADENCE := 1.8
 ## Beyond VISIBLE_DISTANCE the mesh is hidden and main.gd stops processing us.
 const ANIM_LOD_DISTANCE := 40.0
 const ANIM_LOD_INTERVAL := 3
+## Seconds a held pose (scripts/street_places.gd people) animates in full
+## before its cheaper update rate starts
+const HELD_SETTLE := 1.0
 ## Traffic's T3 drives pedestrians along the pavement graph through the
 ## PedestrianNavigation hook below. Set false to fall back to the old bounded
 ## wander; set_locomotion and all of the animation work the same either way.
@@ -56,6 +60,16 @@ var tags: Array = []
 var gender := ""
 ## Clips this pedestrian uses (scripts/animation_sets.gd), picked once by ID
 var clip_set := {}
+## Replaces slots of the picked clip set, e.g. {"sit": "mx/Slump"}
+var clip_overrides := {}
+## People placed at a spot (scripts/street_places.gd) instead of walking the
+## pavements: "" walks as normal; "idle", "sit" or "lie" stays put in that
+## state. Cheap: no navigation and no physics movement.
+var anchor_state := ""
+## With anchor_state set, walk this loop instead of standing: each stop is
+## {"p": Vector3, "wait": seconds, "hide": bool (out of sight while waiting,
+## e.g. inside a shop), "bag": bool (carry a bag from here on)}
+var loop_path: Array = []
 
 ## Pavement navigation (owner: traffic). Non-null once the pavement graph is
 ## ready; world_systems_test.gd reads this property.
@@ -77,6 +91,10 @@ var _last_delta := 1.0 / 60.0
 var _anim_accum := 0.0
 var _lod_counter := 0
 var _ragdolled := false
+var _loop_index := 0
+var _loop_wait := 0.0
+var _settle_time := 0.0
+var _bag: Node3D
 
 
 func _ready() -> void:
@@ -114,6 +132,9 @@ func _ready() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash(get_instance_id())
 		clip_set = AnimationSets.pick(character_id, gender, tags)
+		for slot: String in clip_overrides:
+			if Locomotion.has_clip(clip_overrides[slot]):
+				clip_set[slot] = clip_overrides[slot]
 		_loco = Locomotion.create(model, clip_set, rng)
 		if _loco == null:
 			push_warning("pedestrian %s: model can't use the shared clips; using the procedural walk" % character_id)
@@ -130,7 +151,10 @@ func _ready() -> void:
 	_facing = Vector3.FORWARD.rotated(Vector3.UP, rotation.y)
 	_pick_direction()
 	# Delegate walking to traffic's pavement navigation (T3) once enabled.
-	if USE_PAVEMENT_NAVIGATION:
+	if anchor_state != "":
+		if not loop_path.is_empty():
+			global_position = loop_path[0].p
+	elif USE_PAVEMENT_NAVIGATION:
 		var graph := PavementGraph.shared()
 		if graph != null and not graph.points.is_empty():
 			navigation = PedestrianNavigation.new(self)
@@ -147,6 +171,10 @@ func _physics_process(delta: float) -> void:
 	if _ragdolled:
 		return
 	_last_delta = delta
+	if anchor_state != "":
+		_anchored(delta)
+		_advance_animation(delta)
+		return
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 	if navigation != null:
@@ -156,6 +184,68 @@ func _physics_process(delta: float) -> void:
 		_wander(delta)
 	move_and_slide()
 	_advance_animation(delta)
+
+
+## A placed person: holds its state, or walks its loop with no physics
+## (the loops are laid out clear of obstacles).
+func _anchored(delta: float) -> void:
+	if loop_path.is_empty():
+		set_locomotion(0.0, anchor_state, Vector3.INF)
+		return
+	var stop: Dictionary = loop_path[_loop_index]
+	if _loop_wait > 0.0:
+		_loop_wait -= delta
+		if _loop_wait <= 0.0:
+			visible = true
+			_loop_index = (_loop_index + 1) % loop_path.size()
+		set_locomotion(0.0, "idle", Vector3.INF)
+		return
+	var to_stop: Vector3 = stop.p - global_position
+	to_stop.y = 0.0
+	if to_stop.length() < 0.15:
+		_loop_wait = float(stop.get("wait", 0.0)) + 0.001
+		if stop.get("hide", false):
+			visible = false
+		if stop.has("bag"):
+			set_carrying(bool(stop.bag))
+		return
+	var step := minf(SPEED * delta, to_stop.length())
+	global_position += to_stop.normalized() * step
+	set_locomotion(SPEED, "walk", to_stop)
+
+
+## Someone holding a spot (lying, sitting, standing at a stall) moves little:
+## after settling into the pose, every third frame up close, a fixed pose
+## beyond ANIM_LOD_DISTANCE, and no updates at all once lying still.
+func _advance_held(delta: float) -> void:
+	_anim_accum += delta
+	_settle_time += delta
+	if _settle_time > HELD_SETTLE and (anchor_state == "lie" or _distance_to_view() > ANIM_LOD_DISTANCE):
+		_anim_accum = 0.0
+		return
+	_lod_counter += 1
+	if _settle_time <= HELD_SETTLE or _lod_counter >= ANIM_LOD_INTERVAL:
+		_loco.advance(_anim_accum)
+		_anim_accum = 0.0
+		_lod_counter = 0
+
+
+## Shows or hides a shopping bag in the right hand.
+func set_carrying(carrying: bool) -> void:
+	if _bag == null and carrying and _model != null:
+		var skeleton := _model.find_children("*", "Skeleton3D", true, false)
+		if skeleton.is_empty() or not ResourceLoader.exists(BAG_MODEL):
+			return
+		var attach := BoneAttachment3D.new()
+		attach.bone_name = "RightHand"
+		skeleton[0].add_child(attach)
+		var bag := (load(BAG_MODEL) as PackedScene).instantiate() as Node3D
+		# The model is scaled (Renderpeople files are in centimetres); keep the bag 1:1
+		bag.scale = Vector3.ONE / maxf(character_scale, 0.001)
+		attach.add_child(bag)
+		_bag = attach
+	if _bag != null:
+		_bag.visible = carrying
 
 
 ## Bounded random wandering, used when no pavement graph is available. Computes
@@ -202,6 +292,9 @@ func set_locomotion(speed: float, state: String, facing := Vector3.INF) -> void:
 ## frame.
 func _advance_animation(delta: float) -> void:
 	if _loco != null:
+		if anchor_state != "" and loop_path.is_empty():
+			_advance_held(delta)
+			return
 		if _distance_to_view() > ANIM_LOD_DISTANCE:
 			_anim_accum += delta
 			_lod_counter += 1
@@ -315,3 +408,28 @@ func hit_by_vehicle(vehicle_velocity: Vector3, impact_point := Vector3.INF, vehi
 			push_warning("realistic ragdoll failed for %s; using stick fallback" % character_id)
 		Ragdoll.spawn(get_parent(), global_transform, colors, vehicle_velocity * 0.8 + Vector3.UP * 3.0)
 	queue_free()
+
+
+## A pedestrian for registry `character`, ready to add to the scene (main.gd
+## and scripts/street_places.gd use this).
+static func from_entry(character: Dictionary, rng: RandomNumberGenerator) -> CharacterBody3D:
+	var ped = load("res://scripts/pedestrian.gd").new()
+	ped.character_id = character.id
+	ped.character_display_name = character.display_name
+	ped.model_path = character.model_path
+	ped.appearance_category = character.appearance_category
+	ped.outfit_id = character.outfit_id
+	ped.character_scale = float(character.get("scale", 1.0))
+	ped.collision_radius = float(character.get("collision_radius", 0.3))
+	ped.collision_height = float(character.get("collision_height", 1.8))
+	if str(character.model_path).begins_with("res://"):
+		var model_resource: Resource = load(character.model_path)
+		if model_resource is PackedScene:
+			ped.model_scene = model_resource
+	ped.colors = Ragdoll.random_colors(rng)
+	# The knocked-down stick fallback is procedural; at least match the skin
+	if character.appearance_category == "black_african":
+		ped.colors["skin"] = Color(0.24, 0.14, 0.09).lerp(Color(0.36, 0.22, 0.14), rng.randf())
+	elif character.appearance_category == "white":
+		ped.colors["skin"] = Color(0.85, 0.68, 0.58)
+	return ped

@@ -2,7 +2,7 @@
 
 Spec: `prompt-lead.md`. One phase per session. After each phase: commit, add 3–4 lines to README's Progress log, update `progress.md`, stop. The next session starts with "continue with the next phase in docs/PLAN_street_life.md".
 
-**Status:** Phase 0 and Phase 1 done. Next: Phase 2.
+**Status:** Phases 0–2 done. Next: Phase 3 (danfos).
 
 ## What already exists (reuse, don't redo)
 
@@ -35,7 +35,7 @@ Sex: **M** male only, **F** female only, **any** both. Loop: **L** looping, **1*
 | Female Sitting Pose | seated pose | F | P | Phase 1/2: women sitting |
 | Male Laying Pose | lying down | M | P | Phase 1: lie test; Phase 2: men sleeping on mats |
 | Female Laying Pose | lying down | F | P | Phase 2: women sleeping on mats |
-| drug abuse Pose | slumped against a wall | any | P | Phase 2: people sitting against the pillars (shown as "resting"; check the look) |
+| drug abuse Pose | standing, bent forward at the waist | any | P | skip: reads as doubled over. People under the bridge sit on upturned crates by the pillars instead (Sitting Talking), since no clip sits on the ground |
 | Angry | standing, angry shouting (19 s) | any | L | Phase 3: driver and conductor shout at the player; Phase 4: angry crowd at the driver |
 | Yelling While Standing | yelling, leaning forward | any | 1 | Phase 4: shouting after a crash, shouting after a driver who leaves |
 | Block | arms raised, standing firm | any | 1 (hold last frame) | Phase 4: blocking the car |

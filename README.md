@@ -14,7 +14,8 @@ This section is the handoff note between work sessions. It's kept current so a n
 
 - **Phase 1 done (2026-10-29):** pedestrians and the player play the owner's Mixamo clips (idle, walk, jog, run, sit, lie), chosen per character from `assets/animations/animation_sets.json` by gender and age tag and seeded by ID; the F4 inspector lists them. The clips and the library built from them (`tools/build_mixamo_library.sh` → `assets/animations/mixamo_library.res`) are git-ignored; without them the game uses the CC0 clips. `tests/animation_sets_test.gd` checks clips, sex limits and sit/lie heights. A crossing gap was fixed: crossing pedestrians now pass a slower person ahead instead of being stuck behind them.
 - Profile (headless, after Phase 1): High 6.89 ms avg, Low 6.90 ms avg, unchanged from before.
-- **Next: Phase 2** (under-bridge, suya kiosk, supermarket, medical point, congested stalls). Start with "continue with the next phase in docs/PLAN_street_life.md".
+- **Phase 2 done:** `blender/make_buildings.py` builds 16 low-poly CC0 models into `assets/models/buildings/` with `manifest.json` (collision boxes); `scripts/street_places.gd` places a flyover over road 1 (traffic drives under it) with people sleeping, sitting on crates and pacing under it around a smoky fire; the market next to the start block (GARDEN CITY MART with shoppers coming out with bags, MALLAM SUYA SPOT with smoke, seller and customers, packed stalls and umbrellas); and HOPE MEDICAL POINT across the road (green +, people waiting on a bench). Place people reuse `pedestrian.gd` with `anchor_state`/`loop_path` (no navigation) and scale with the quality preset. `tests/street_places_test.gd`; renders: `tests/view_places.gd`. Cost: about 0.9 ms of physics time on Low for its 8 people (A/B with `-- --no-places`); held poses update every third frame up close and freeze beyond 40 m; lying people stop updating once settled.
+- **Next: Phase 3** (danfos). Start with "continue with the next phase in docs/PLAN_street_life.md".
 
 ### Completed task: Android support
 
@@ -529,6 +530,7 @@ godot --headless --path . --script tests/pedestrian_models_test.gd
 godot --headless --path . --script tests/skeleton_test.gd
 godot --headless --path . --script tests/ragdoll_models_test.gd
 godot --headless --path . --script tests/animation_sets_test.gd
+godot --headless --path . --script tests/street_places_test.gd
 ```
 
 `skeleton_test.gd` checks that all 23 characters have every standard bone. `ragdoll_models_test.gd` hits every character with a car or bus and checks the realistic mesh stays visible with no stick figure, no body below the ground or NaN, joints within 2 cm, settling within 5 s, and the player's recovery blend. Renders: `godot --path . --script tests/view_ragdoll.gd` (ragdolls), `tests/view_animation.gd -- <PED_ID> idle:0,walk:1.25,run:4.5 front|side|34` (walk cycles), `tests/view_traffic.gd` (F6 top-down), `tests/view_driver.gd -- player` (player model).
