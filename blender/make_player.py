@@ -31,6 +31,14 @@ OUT_DIR = os.path.join(ROOT, "assets", "characters", "player")
 MPFB_DATA = os.path.join(bpy.utils.extension_path_user("bl_ext.user_default.mpfb", create=False), "data")
 MAX_TEXTURE = 1024
 BLACK_HAIR = (0.3, 0.27, 0.25)
+# The MPFB body proxy measured in Blender (body_height) is this many times
+# smaller than the exported glTF is in metres inside Godot. Calibrated against
+# the in-engine AABB rendered by tests/view_driver.gd -- player at the slider
+# actually used below (slider 0.43: proxy 0.840 m, Godot height 1.81 m -> 2.155).
+# Used to report the true export height and to pick the fixed height slider. The
+# pedestrians set the slider the same way (a fixed value), so re-measure with
+# view_driver if this ever drifts.
+EXPORT_SCALE = 2.155
 
 # ============================================================================
 # PLAYER CONFIG: the main character. Change this block to change the player.
@@ -46,10 +54,12 @@ PLAYER = {
     "age": 0.5,
     "muscle": 0.72,   # athletic
     "weight": 0.45,   # lean
-    # Body height (top of the head, without hair or shoes), in metres. The
-    # script tunes MakeHuman's height slider until the body matches.
+    # Target standing height in metres (for reference / the credits line).
     "target_height_m": 1.80,
-    "height_guess": 0.62,
+    # MakeHuman height slider, 0..1, set directly like the pedestrians. 0.43
+    # gives ~1.80 m in Godot (target_height_m / EXPORT_SCALE). To change the
+    # player's height, change this and re-measure with view_driver -- player.
+    "height": 0.43,
     "skin": "young_african_male",
     # Multiplies the skin texture (on-screen colour); below 1 darkens it
     "skin_tint": (0.78, 0.74, 0.72),
@@ -177,24 +187,14 @@ def body_height(rig, basemesh):
 
 def build():
     entry = PLAYER
-    target = entry["target_height_m"]
-    # Secant search on MakeHuman's height slider (roughly linear in metres)
-    h0, h1 = entry["height_guess"], entry["height_guess"] + 0.1
-    basemesh, rig = make_human(entry, h0)
-    m0 = body_height(rig, basemesh)
-    print(f"PLAYER height slider {h0:.3f} -> {m0:.3f} m")
-    height = h0
-    for _ in range(4):
-        if abs(m0 - target) < 0.005:
-            break
-        basemesh, rig = make_human(entry, h1)
-        m1 = body_height(rig, basemesh)
-        print(f"PLAYER height slider {h1:.3f} -> {m1:.3f} m")
-        height = h1
-        if abs(m1 - target) < 0.005 or abs(m1 - m0) < 1e-4:
-            break
-        h0, m0, h1 = h1, m1, min(1.0, max(0.0, h1 + (target - m1) * (h1 - h0) / (m1 - m0)))
-    measured = body_height(rig, basemesh)
+    # MakeHuman's height slider is set directly (the pedestrians do the same).
+    # body_height measures the Blender proxy; EXPORT_SCALE converts it to the
+    # true exported height in metres (verified in Godot with view_driver).
+    height = entry["height"]
+    basemesh, rig = make_human(entry, height)
+    proxy_m = body_height(rig, basemesh)
+    measured = proxy_m * EXPORT_SCALE
+    print(f"PLAYER height slider {height:.3f} -> proxy {proxy_m:.3f} m -> ~{measured:.3f} m exported")
 
     eyes = part(rig, "low-poly")
     if eyes:

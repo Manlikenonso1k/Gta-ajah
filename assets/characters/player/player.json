@@ -1,0 +1,10 @@
+{
+ "id": "PLAYER_PH_HUSTLER",
+ "display_name": "Young PH hustler",
+ "description": "Black African man, about 25 years old, about 1.80 m tall, athletic build, dark skin, short fade/low cut hair (black), casual shirt and jeans, trainers.",
+ "model_path": "res://assets/characters/player/player.glb",
+ "body_height_m": 1.81,
+ "skeleton": "SkeletonProfileHumanoid via BoneMap in player.glb.import (source bones mixamorig_*)",
+ "source": "Generated with MPFB 2 from MakeHuman system assets and asset packs (CC0) by blender/make_player.py",
+ "license": "CC0"
+}
