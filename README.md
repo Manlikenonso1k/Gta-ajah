@@ -59,10 +59,10 @@ Specs: `prompt-1-realistic-ragdoll.md`, `prompt-2-natural-animation.md`, `prompt
 
 | Phase | Teammate | Work | Status |
 |---|---|---|---|
-| 1 | `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll | ⏳ Step 1 (standard skeleton) done, names sent; ragdoll in progress |
-| 1 | `animator` | Task 2: find/licence/download clips now; retarget after the bone names arrive | ⏳ Started |
-| 1 | `traffic` | Task 3: road graph, lanes, AI driving, pavements and crossings | ⏳ Started |
-| 1 | `vehicles` | Task 4 steps 1–2: player model ("Young PH hustler": Black African man, ~25, ~1.80 m, athletic, dark skin, short black fade, casual shirt, jeans, trainers), seat and steering-wheel measurements, steering wheels cut out | ⏳ Started (step 2 first) |
+| 1 | `ragdoll` | Task 1: standard skeleton first, then the realistic ragdoll | ✅ Done. Realistic mesh follows the 16 physics bodies; no stick figure; needs the Jolt solver settings in `project.godot` (see Decisions) |
+| 1 | `animator` | Task 2: find/licence/download clips now; retarget after the bone names arrive | ✅ Done. Quaternius CC0 mocap library, AnimationTree locomotion, arm-clearance fix (arms no longer clip into the torso) |
+| 1 | `traffic` | Task 3: road graph, lanes, AI driving, pavements and crossings | ✅ Done. 90/10 drivers, 99.6% lane-keeping, 100% pavement-keeping in the 60 s test |
+| 1 | `vehicles` | Task 4 steps 1–2: player model ("Young PH hustler": Black African man, ~25, ~1.80 m, athletic, dark skin, short black fade, casual shirt, jeans, trainers), seat and steering-wheel measurements, steering wheels cut out | ✅ Done. `cabin` data for all 10 models; player model generated (1.81 m, CC0), not yet wired into `player.gd` |
 | 1 | `qa` | Baseline tests and profile in `docs/QA_REPORT.md`, then review each task | ✅ Baseline done (all 9 tests pass; headless ~6.9 ms/frame both presets; windowed High 25.2 fps, Low 57.5 fps at 1280×720 on the dev Mac). Reviewing as tasks finish |
 | 2 | `vehicles` | Task 4 steps 3–5: hands on wheel, realistic player, drivers and passengers in traffic | ⬜ After `ragdoll`, `animator`, `vehicles` approved by `qa` |
 
@@ -77,6 +77,8 @@ Specs: `prompt-1-realistic-ragdoll.md`, `prompt-2-natural-animation.md`, `prompt
 | `qa` | new `tests/qa_*.gd` files and `docs/QA_REPORT.md` only |
 | lead | `scripts/main.gd`, `scripts/player.gd`, `README.md`, `.gitignore`, `project.godot`, `docs/TEAM_TASKS.md`, `tools/`, and every file not listed above |
 
+Ownership changes: `scripts/locomotion.gd` and `scripts/pedestrian.gd` moved from `animator` to lead after Task 2 finished (lead fixed the blend-point name warning and switched pedestrians to pavement navigation).
+
 Notes on shared code: the car-hit call in `car.gd` (owner `traffic`) and `hit_by_vehicle()` in `pedestrian.gd` (owner `animator`) are changed by those owners at `ragdoll`'s request. In Phase 2 `vehicles` keeps driver/occupant/steering-wheel code in new scripts (for example `scripts/vehicle_occupants.gd`, `scripts/steering_wheel.gd`) and asks `traffic` for the hook lines in `car.gd`/`traffic.gd`; `player.gd` moves to `vehicles` in Phase 2.
 
 ### Interfaces between tasks
@@ -85,10 +87,10 @@ Agreed interfaces are recorded here by the lead as teammates settle them.
 
 - **Standard bone names (ragdoll → everyone):** Godot's `SkeletonProfileHumanoid` names, applied to all 23 characters by `BoneMap` import retargeting in each `.glb.import`; the skeleton node is named `GeneralSkeleton`. Bones: `Root`, `Hips`, `Spine`, `Chest`, `UpperChest`, `Neck`, `Head`, `LeftShoulder`/`RightShoulder`, `LeftUpperArm`, `LeftLowerArm`, `LeftHand` (and Right), `LeftUpperLeg`, `LeftLowerLeg`, `LeftFoot`, `LeftToes` (and Right), plus the profile's finger bones. Checked by `tests/skeleton_test.gd`.
 - **Ragdoll start function (ragdoll → everyone):** `RealisticRagdoll.spawn(model, parent, character_velocity, impact_velocity, impact_point, vehicle_mass)` in `scripts/realistic_ragdoll.gd`. Characters expose `hit_by_vehicle(vehicle_velocity: Vector3, impact_point := Vector3.INF, vehicle_mass := 1200.0)`; `car.gd` calls `body.hit_by_vehicle(linear_velocity, global_position, mass)`.
-- **Locomotion function and states (animator → traffic, vehicles):** `set_locomotion(speed: float, state: String)` on the pedestrian node; states `idle`, `walk`, `run`, `wait_at_kerb` (proposed by traffic, to be confirmed by animator).
+- **Locomotion function and states (animator → traffic, vehicles):** `set_locomotion(speed: float, state: String, facing := Vector3.INF)` on the pedestrian node; states `idle`, `walk`, `jog`, `run`, `wait_at_kerb` (unknown states fall back to walk or idle). `facing` turns the body smoothly toward a direction; `Vector3.INF` keeps the heading. One-shot clips: `Locomotion.play_action("GetUp")` returns the clip length (for the player's get-up in Phase 2).
 - **Pedestrian navigation hook (traffic → animator):** `scripts/pedestrian_navigation.gd` (owner traffic). `pedestrian.gd` creates `navigation = PedestrianNavigation.new(self)` at the end of `_ready()`; each physics frame it keeps gravity, calls `navigation.physics_step(delta)` (sets `velocity.x/z` and `rotation.y`, calls `set_locomotion` if present), then `move_and_slide()`, then poses the animation from velocity.
-- **Seat and steering-wheel data in `vehicles.json` (vehicles → Phase 2):** _pending_
-- **How traffic cars are spawned and driven (traffic → Phase 2):** _pending_
+- **Seat and steering-wheel data in `vehicles.json` (vehicles → Phase 2):** each model has a `"cabin"` block in car-local metres (+Z forward, +X driver side, y = 0 at the tyre contact): `seat` (driver hip point), `wheel_center` (rim centre where the wheel is mounted), optional `wheel_cut_center` (where a right-hand-drive model's wheel is cut from), `wheel_radius`, `wheel_tilt` (degrees from vertical; rotation axis `(0, sin(tilt), -cos(tilt))`), optional `wheel_depth`, `wheel_turn_deg` (rim rotation at full lock: cars ~220–240, vans ~300, buses ~450), `wheel_source` (`cut` or `added`), optional `wheel_node`. `VehicleModel.build(key)` returns `driver_seat` (Vector3) and `steering_wheel` = `{center, axis, radius, max_turn (radians), parts: [[Mesh, Transform3D], ...]}`; the part transforms are relative to `center`, so a pivot node at `center` rotates the wheel about `axis`.
+- **How traffic cars are spawned and driven (traffic → Phase 2):** `scripts/traffic.gd` is a Node; `main.gd` calls `traffic.setup(world, quality["traffic"])`. `spawn_car(lane, distance, model, reckless) -> VehicleBody3D` creates a `car.gd` with `ai_enabled = true`, `persistent_id = "traffic_NN"`, a `TrafficDriver` (`scripts/traffic_driver.gd`) as `car.ai_driver`, groups `cars` and `traffic`, and emits `car_spawned(car)`. Each physics frame `car.gd` calls `ai_driver.control(delta)` and applies `out_throttle`/`out_steer`/`out_brake`; `ai_driver.reckless` marks the 10% danfo drivers. Cars within 115 m use real vehicle physics; farther cars are frozen and moved along the road graph by `advance_lightweight(dt)`. Hooks for drivers and passengers: `car_spawned(car)` (attach occupants) and `car_detail_changed(car, physics: bool)` (show the seated driver only while physics is on). Useful accessors on `car.gd`: `driver_seat_point()`, `steering`, `ai_half_length()`, `ai_wheelbase()`.
 
 ### Where things are (quick map)
 
@@ -101,7 +103,7 @@ Agreed interfaces are recorded here by the lead as teammates settle them.
 
 ### Pedestrian character workflow
 
-`scripts/pedestrian_registry.gd` lists every pedestrian with a stable ID, model path, appearance category, outfit, tags, scale, source and licence. Downloaded models are in its `CHARACTERS` list; generated ones come from `assets/characters/pedestrians/generated_roster.json`. `BLACK_AFRICAN_WEIGHT` / `WHITE_WEIGHT` set the population mix. `pedestrian.gd` turns each model to face −Z, hides it beyond 120 m, and walks it with `humanoid_walk.gd`. F4 toggles an inspector for the nearest pedestrian. How to add one: [the catalogue](docs/PEDESTRIAN_CATALOG.md) and [Pedestrian characters](#pedestrian-characters).
+`scripts/pedestrian_registry.gd` lists every pedestrian with a stable ID, model path, appearance category, outfit, tags, scale, source and licence. Downloaded models are in its `CHARACTERS` list; generated ones come from `assets/characters/pedestrians/generated_roster.json`. `BLACK_AFRICAN_WEIGHT` / `WHITE_WEIGHT` set the population mix. `pedestrian.gd` turns each model to face −Z, hides it beyond 120 m, and animates it with the shared mocap library through `scripts/locomotion.gd` (an AnimationTree blending idle → walk → jog → run by ground speed); `humanoid_walk.gd` remains only as a fallback for skeletons that can't take the clips. F4 toggles an inspector for the nearest pedestrian. How to add one: [the catalogue](docs/PEDESTRIAN_CATALOG.md) and [Pedestrian characters](#pedestrian-characters).
 
 ### Decisions and gotchas so far
 
@@ -110,6 +112,12 @@ Agreed interfaces are recorded here by the lead as teammates settle them.
 - **Vehicle textures:** must be imported as VRAM Compressed; lossless textures made loading take 20 s instead of 0.7 s.
 - **Blender on the dev Mac (macOS 12):** glTF import and export fail because Blender 4.5's bundled numpy needs macOS 13.3. See [Troubleshooting](#troubleshooting).
 - **Touch input:** `touch_controls.gd` reads `InputEventScreenTouch`/`Drag` in `_input()` and presses the normal input actions (`Input.action_press` with analog strength). Godot also turns touches into fake mouse events; `camera_rig.gd` ignores those (`event.device == InputEvent.DEVICE_ID_EMULATION`) and skips mouse capture and Esc on mobile. Touch look goes through `camera_rig.look()`, the same function the mouse uses. Run is a toggle on touch, so the right thumb stays free for looking.
+- **Ragdoll posing:** a `SkeletonModifier3D`'s callback is not run for a skeleton whose AnimationMixer is off (seen in Godot 4.7.2 script runs), so `realistic_ragdoll.gd` writes the body rotations onto the bones from its own `_physics_process`. Only the hips move in position; every other bone only rotates, so the skin can't stretch. RigidBody3D + joints was kept over `PhysicalBone3D` (stable with Jolt, nothing gained by switching).
+- **Jolt solver settings:** `project.godot` raises `jolt_physics_3d/simulation/position_steps` and `velocity_steps` to 24 and `baumgarte_stabilization_factor` to 0.4. At the defaults the invisible ragdoll bodies drifted 5–8 cm apart in a hard hit (the spec allows 2 cm). Measured cost was nil (8 ragdolls ≈ 3.3 ms physics). Car handling is unaffected: cars use raycast wheels, not joints.
+- **Animation clips:** Quaternius Universal Animation Library 1 & 2 (CC0). Mixamo was rejected because its terms don't allow the clip files in a public repo. The clips hold the arms close to the body, so `locomotion.gd` measures each character's idle hand clearance and swings the upper arms out just enough to clear the torso.
+- **Blend point names:** Godot 4.7 warns unless each `add_blend_point()` gets a name (4th argument). Setting `resource_name` on the node doesn't count.
+- **Player height:** `make_player.py` uses a fixed MakeHuman height slider (0.43 → 1.81 m in the game). The old search measured the Blender proxy, which is about 2.15× smaller than the exported model, and made a 2.56 m giant.
+- **Windows setup:** Godot at `C:\Godot\godot.exe`, Blender 4.5.15 at `C:\Blender\blender.exe`, MPFB 2.0.18 with all 8 MakeHuman packs in `%APPDATA%\Blender Foundation\Blender\4.5\extensions\.user\user_default\mpfb\data\`. In Git Bash use forward slashes (`/c/Godot/godot.exe`). The suits03 pack's file is `suits03_cc-by.zip` (hyphen).
 - **The prompt says "9 cars" and "preload() in car.gd":** both are out of date. There are now 13 parked vehicles (10 models), and models are loaded by `vehicle_model.gd`.
 
 ---
@@ -511,7 +519,11 @@ godot --headless --path . --script tests/vehicle_persistence_test.gd
 godot --headless --path . --script tests/world_systems_test.gd
 godot --headless --path . --script tests/performance_profile.gd
 godot --headless --path . --script tests/pedestrian_models_test.gd
+godot --headless --path . --script tests/skeleton_test.gd
+godot --headless --path . --script tests/ragdoll_models_test.gd
 ```
+
+`skeleton_test.gd` checks that all 23 characters have every standard bone. `ragdoll_models_test.gd` hits every character with a car or bus and checks the realistic mesh stays visible with no stick figure, no body below the ground or NaN, joints within 2 cm, settling within 5 s, and the player's recovery blend. Renders: `godot --path . --script tests/view_ragdoll.gd` (ragdolls), `tests/view_animation.gd -- <PED_ID> idle:0,walk:1.25,run:4.5 front|side|34` (walk cycles), `tests/view_traffic.gd` (F6 top-down), `tests/view_driver.gd -- player` (player model).
 
 The tire audit checks that all four wheel meshes exist, retain usable geometry and width, stay within the configured tire envelope, and remain at the configured front and rear axles. It also verifies that the Accord's corrected front wheels are centered. It audits both `assets/models/cars/real/` and `assets/models/cars/mobile/`. The rig check verifies that only the Sprinter driver's door track is active. For a visual check with wheels highlighted in magenta:
 

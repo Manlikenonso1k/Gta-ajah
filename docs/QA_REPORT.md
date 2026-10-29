@@ -55,7 +55,30 @@ Headless CPU only, no GPU. The average sits at about 6.9 ms (~145 fps) on both p
 
 ## Reviews
 
-_None yet._
+### Phase 1 combined pass (Tasks 1, 2, 3 and Task 4 steps 1–2), 2026-10-29
+
+Run by the lead on Windows 10 (Godot 4.7.2), after all four builders reported done, with every task's changes in one tree. `project.godot` includes the Jolt solver settings Task 1 needs.
+
+**Test suite: 11/11 pass, 0 `ERROR`/`SCRIPT ERROR` lines, 0 `WARNING` lines.** smoke_test, touch_controls_test, phone_menu_test, vehicle_tires_test, vehicle_rigs_test, vehicle_contact_test, vehicle_persistence_test, world_systems_test, pedestrian_models_test, skeleton_test, ragdoll_models_test. (The first run showed 120 copies of a Godot 4.7 blend-point warning from `locomotion.gd`; fixed by naming each blend point, then re-run clean.)
+
+**Headless CPU profile (240 frames):**
+
+| Preset | avg frame ms | max frame ms | physics ms | nodes | cars | pedestrians |
+|---|---:|---:|---:|---:|---:|---:|
+| High | 6.892 | 9.527 | 2.624 | 2,734 | 17 | 30 |
+| Low | 6.895 | 8.462 | 1.553 | 1,993 | 7 | 12 |
+
+No regression against the baseline (High 6.897 avg, 10.8–15.9 max, 2.8–3.8 physics; Low 6.90 avg, 9.8–10.0 max). Ragdoll load: about 3.3 ms physics with 8 ragdolls (the Low limit), measured by `ragdoll_models_test.gd -- --fps8`.
+
+**Images checked by eye:** walk/jog/run sheets (`PED_BA_M07_side`, `PED_BA_M09_front` after the arm fix), F6 junction view (`traffic_junction`), player model (`player_front`). The owner spotted pedestrian arms clipping into the torso, which side views had hidden; fixed in `locomotion.gd` and re-checked from the front. Character reviews now include front and 3/4 views.
+
+**Licences:** Quaternius Universal Animation Library 1 & 2, CC0, credited in `assets/animations/CREDITS.md`. Player model built from CC0 MakeHuman assets (none from the CC BY suits03 pack), credited in `assets/characters/player/CREDITS.md`.
+
+**Pavement navigation switched on** (`USE_PAVEMENT_NAVIGATION = true` in `pedestrian.gd`) and the whole suite re-run: still 11/11, 0 errors, 0 warnings. The world test now samples the game's own pedestrians as well as its 12 test walkers: 100.0% of 9,753 samples on the pavement, 19 people crossed, none too slow. Profile after the switch: High 6.892 ms avg / 8.805 max / 1.901 physics; Low 6.901 / 8.653 / 1.127.
+
+**Not measured:** windowed/fullscreen GPU FPS on this machine and FPS on a phone.
+
+Verdict: approved for commit.
 
 ## Open bugs
 

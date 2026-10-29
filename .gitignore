@@ -14,3 +14,6 @@ assets/models/cars/mobile/*_Image_*.jpg
 
 # Lock folder used by tools/locked.sh while one agent runs Godot or Blender
 .tool_lock
+
+# Scratch logs from test and tool runs in the project root
+/*.log
