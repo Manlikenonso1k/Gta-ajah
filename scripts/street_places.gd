@@ -56,15 +56,16 @@ static func build(main: Node3D, city: Node3D, chunks: Dictionary, rng: RandomNum
 
 
 ## Where online players appear: on the pavement in front of the medical
-## point, between its stalls, facing the road. `slot` spreads players 1.2 m
-## apart so they don't spawn inside each other.
+## point, between its stalls, facing its sign (so the camera behind them is
+## over the open road). `slot` spreads players 1.2 m apart so they don't
+## spawn inside each other.
 static func clinic_spawn(slot := 0) -> Transform3D:
 	var yaw := _facing(Vector3(-1, 0, 0))
 	var clinic := City.block_center(3, 1) + Vector3(-City.LOT_OFFSET, 0, City.LOT_OFFSET - 2.0)
 	var across := float(posmod(slot, 4)) * 1.2 - 1.8
 	var spot := _at(clinic, Vector3(across, 0.2, 8.6), yaw)
-	# The player walks towards -Z, the models' fronts are +Z
-	return Transform3D(Basis(Vector3.UP, yaw + PI), spot.origin)
+	# The player faces -Z: turned by `yaw` it looks back at the clinic
+	return Transform3D(Basis(Vector3.UP, yaw), spot.origin)
 
 
 ## A model from the manifest with its collision, placed by `xform`.

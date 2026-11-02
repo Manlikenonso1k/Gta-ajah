@@ -4,6 +4,7 @@ extends Control
 ## autoload (scripts/net.gd) before the city loads.
 
 const GAME_SCENE := "res://scenes/main.tscn"
+const Quality = preload("res://scripts/quality.gd")
 const GOLD := Color(0.95, 0.77, 0.34)
 const MINT := Color(0.55, 0.84, 0.72)
 
@@ -11,6 +12,7 @@ var _name_edit: LineEdit
 var _server_edit: LineEdit
 var _join_edit: LineEdit
 var _status: Label
+var _graphics: OptionButton
 var _buttons: Array[Button] = []
 var _waiting := false
 
@@ -46,6 +48,22 @@ func _ready() -> void:
 	_label(column, "YOUR NAME", 14, MINT, HORIZONTAL_ALIGNMENT_LEFT)
 	_name_edit = _edit(column, str(prefs.get("name", "")), "Player")
 	_name_edit.max_length = 16
+
+	_label(column, "GRAPHICS", 14, MINT, HORIZONTAL_ALIGNMENT_LEFT)
+	_graphics = OptionButton.new()
+	_graphics.custom_minimum_size.y = 46
+	_graphics.add_theme_font_size_override("font_size", 18)
+	var current := Quality.current_name()
+	for preset: String in Quality.MENU_CHOICES:
+		var text := preset.to_upper()
+		if preset == Quality.default_name():
+			text += "  (recommended)"
+		_graphics.add_item(text)
+		if preset == current:
+			_graphics.select(_graphics.item_count - 1)
+	_graphics.item_selected.connect(func(index: int) -> void: Quality.save_name(Quality.MENU_CHOICES[index]))
+	column.add_child(_graphics)
+	column.add_child(_spacer(4))
 
 	_button(column, "PLAY SOLO", _play_solo)
 	column.add_child(_spacer(6))

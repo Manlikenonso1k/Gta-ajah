@@ -47,6 +47,7 @@ func _ready() -> void:
 	Ragdoll.max_ragdolls = quality["ragdolls"]
 	get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	get_viewport().scaling_3d_scale = quality["render_scale"]
+	get_viewport().msaa_3d = quality.get("msaa", Viewport.MSAA_DISABLED)
 	_setup_input()
 	_setup_environment(quality)
 
@@ -285,10 +286,14 @@ func _setup_input() -> void:
 
 
 func _setup_environment(quality: Dictionary) -> void:
+	# Tropical midday: deep blue overhead, pale and hazy at the horizon
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.3, 0.5, 0.78)
-	sky_material.sky_horizon_color = Color(0.82, 0.8, 0.74)
-	sky_material.ground_horizon_color = Color(0.7, 0.62, 0.55)
+	sky_material.sky_top_color = Color(0.16, 0.38, 0.74)
+	sky_material.sky_horizon_color = Color(0.66, 0.76, 0.86)
+	sky_material.sky_curve = 0.12
+	sky_material.ground_bottom_color = Color(0.3, 0.22, 0.17)
+	sky_material.ground_horizon_color = Color(0.66, 0.7, 0.72)
+	sky_material.sun_angle_max = 20.0
 	var sky := Sky.new()
 	sky.sky_material = sky_material
 
@@ -296,26 +301,44 @@ func _setup_environment(quality: Dictionary) -> void:
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	# Mostly warm daylight rather than blue sky, so colours stay true. Older
-	# Intel Macs (OpenGL) often drop the sun entirely, leaving only ambient.
+	# Mostly warm daylight rather than blue sky, so colours stay true. Kept
+	# well below the sun so walls in shade read as shade. Older Intel Macs
+	# (OpenGL) often drop the sun entirely, leaving only ambient.
 	env.ambient_light_color = Color(1.0, 0.95, 0.85)
-	env.ambient_light_sky_contribution = 0.35
+	env.ambient_light_sky_contribution = 0.5
+	env.ambient_light_energy = 0.6
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.glow_enabled = true
-	# Humid Niger Delta haze
+	env.tonemap_exposure = 1.05
+	env.glow_enabled = quality.get("glow", true)
+	env.glow_intensity = 0.4
+	env.glow_hdr_threshold = 1.2
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.18
+	# Humid Niger Delta haze: clear nearby, thickening to hide the draw
+	# distance, and only lightly over the sky so it stays blue
+	var draw_distance: float = quality["draw_distance"]
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.82, 0.8, 0.72)
-	env.fog_density = quality["fog_density"]
+	env.fog_mode = Environment.FOG_MODE_DEPTH
+	env.fog_light_color = Color(0.72, 0.78, 0.84)
+	env.fog_density = 1.0
+	env.fog_depth_begin = draw_distance * 0.35
+	env.fog_depth_end = draw_distance * 0.95
+	env.fog_depth_curve = 1.6
+	env.fog_sky_affect = 0.2
+	env.fog_sun_scatter = 0.15
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-50, 30, 0)
-	sun.light_color = Color(1.0, 0.95, 0.85)
-	sun.light_energy = 1.3
+	sun.rotation_degrees = Vector3(-46, 35, 0)
+	sun.light_color = Color(1.0, 0.94, 0.82)
+	sun.light_energy = 1.55
 	sun.shadow_enabled = quality["shadows"]
 	sun.directional_shadow_max_distance = quality["shadow_distance"]
+	sun.directional_shadow_mode = quality.get("shadow_mode", DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS)
+	sun.shadow_blur = 1.5
 	add_child(sun)
 
 

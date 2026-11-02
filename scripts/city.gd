@@ -3,6 +3,10 @@ extends RefCounted
 ## trees. Swap pieces for Blender models in assets/models/ as they're made.
 
 const Ragdoll = preload("res://scripts/ragdoll.gd")
+const BUILDING_SHADER = preload("res://shaders/building.gdshader")
+const ASPHALT_SHADER = preload("res://shaders/asphalt.gdshader")
+const PAVEMENT_SHADER = preload("res://shaders/pavement.gdshader")
+const LATERITE_SHADER = preload("res://shaders/laterite.gdshader")
 
 const BLOCK := 40.0
 const ROAD := 12.0
@@ -65,8 +69,8 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 	ground_shape.position.y = -1
 	ground.add_child(ground_shape)
 	city.add_child(ground)
-	_plane(city, Vector2(1000, 1000), 0.0, Color(0.55, 0.32, 0.2))
-	_plane(city, Vector2(HALF * 2, HALF * 2), 0.01, Color(0.18, 0.18, 0.19))
+	_plane(city, Vector2(1000, 1000), 0.0, Color(0.55, 0.32, 0.2), _shader_material(LATERITE_SHADER))
+	_plane(city, Vector2(HALF * 2, HALF * 2), 0.01, Color(0.18, 0.18, 0.19), _shader_material(ASPHALT_SHADER, {"road_pitch": PITCH, "lane_offset": LANE_OFFSET}))
 
 	for k in GRID + 1:
 		_box(city, Vector3(0.2, 0.02, HALF * 2), Vector3(road_line(k), 0.02, 0), Color(0.9, 0.75, 0.2), false)
@@ -81,7 +85,7 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 			chunk.set_meta("stream_center", c)
 			city.add_child(chunk)
 			spawns["chunks"].append(chunk)
-			_box(chunk, Vector3(BLOCK, 0.1, BLOCK), c + Vector3(0, 0.05, 0), Color(0.62, 0.6, 0.56), false)
+			_box(chunk, Vector3(BLOCK, 0.1, BLOCK), c + Vector3(0, 0.05, 0), Color(0.62, 0.6, 0.56), false, _shader_material(PAVEMENT_SHADER, {"block_half": BLOCK / 2.0}))
 			for lx in [-1, 1]:
 				for lz in [-1, 1]:
 					var lot := c + Vector3(lx * LOT_OFFSET, 0, lz * LOT_OFFSET)
@@ -186,22 +190,37 @@ static func set_chunk_active(chunk: Node3D, active: bool) -> void:
 			pending.append(child)
 
 
-static func _plane(parent: Node3D, size: Vector2, y: float, color: Color) -> void:
+static var _shader_materials := {}
+
+
+## One shared material per shader and parameter set (shaders/*.gdshader).
+static func _shader_material(shader: Shader, params := {}) -> ShaderMaterial:
+	var key := [shader.resource_path, params]
+	if not _shader_materials.has(key):
+		var mat := ShaderMaterial.new()
+		mat.shader = shader
+		for name: String in params:
+			mat.set_shader_parameter(name, params[name])
+		_shader_materials[key] = mat
+	return _shader_materials[key]
+
+
+static func _plane(parent: Node3D, size: Vector2, y: float, color: Color, material: Material = null) -> void:
 	var mesh := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = size
 	mesh.mesh = plane
-	mesh.material_override = Ragdoll.material(color)
+	mesh.material_override = material if material != null else Ragdoll.material(color)
 	mesh.position.y = y
 	parent.add_child(mesh)
 
 
-static func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color, collide := true) -> void:
+static func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color, collide := true, material: Material = null) -> void:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
 	mesh.mesh = box
-	mesh.material_override = Ragdoll.material(color)
+	mesh.material_override = material if material != null else Ragdoll.material(color)
 	if collide:
 		var body := StaticBody3D.new()
 		body.position = pos
@@ -220,12 +239,33 @@ static func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color, coll
 static func _building(parent: Node3D, lot: Vector3, rng: RandomNumberGenerator) -> void:
 	var size := Vector3(rng.randf_range(10, 15), rng.randf_range(6, 28), rng.randf_range(10, 15))
 	var color: Color = BUILDING_COLORS[rng.randi() % BUILDING_COLORS.size()]
-	_box(parent, size, lot + Vector3(0, size.y / 2, 0), color)
-	# Dark window bands, one per floor
-	var floor_y := 2.0
-	while floor_y < size.y - 1.0:
-		_box(parent, Vector3(size.x + 0.1, 1.1, size.z + 0.1), lot + Vector3(0, floor_y, 0), Color(0.12, 0.16, 0.2), false)
-		floor_y += 3.2
+	# Windows, shops, signs and weathering come from shaders/building.gdshader
+	_box(parent, size, lot + Vector3(0, size.y / 2, 0), color, true, _shader_material(BUILDING_SHADER, {"wall_color": color}))
+	_roof_details(parent, lot, size)
+
+
+## Black plastic water tanks and a stair housing on the roof, as on most
+## Port Harcourt buildings. Placed from a hash of the lot so the city's random
+## numbers (and so every other placement) stay the same.
+static func _roof_details(parent: Node3D, lot: Vector3, size: Vector3) -> void:
+	var h := absi(hash(Vector2i(roundi(lot.x), roundi(lot.z))))
+	var top := lot.y + size.y
+	var tanks := 1 + h % 3
+	for n in tanks:
+		var tank := MeshInstance3D.new()
+		var cylinder := CylinderMesh.new()
+		cylinder.top_radius = 0.75
+		cylinder.bottom_radius = 0.8
+		cylinder.height = 1.6
+		cylinder.radial_segments = 12
+		cylinder.rings = 1
+		tank.mesh = cylinder
+		tank.material_override = Ragdoll.material(Color(0.07, 0.07, 0.08))
+		var side := -1.0 if (h >> (n + 2)) % 2 == 0 else 1.0
+		tank.position = lot + Vector3(size.x * 0.3 * side, size.y + 0.8, size.z * (0.32 - n * 0.22))
+		parent.add_child(tank)
+	if size.y > 9.0:
+		_box(parent, Vector3(3.0, 2.4, 3.2), Vector3(lot.x - size.x * 0.15, top + 1.2, lot.z + size.z * 0.1 * (1 if h % 2 == 0 else -1)), Color(0.72, 0.7, 0.66), false)
 
 
 static func _palm(parent: Node3D, pos: Vector3, rng: RandomNumberGenerator) -> void:
