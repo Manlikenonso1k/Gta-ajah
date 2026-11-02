@@ -10,6 +10,13 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 This section is the handoff note between work sessions. It's kept current so a new session can pick up the work without reading the whole codebase. **Update it at the end of every step.**
 
+### Graphics, street furniture and controls (2026-11-02)
+
+- City surfaces use shaders (`shaders/`): building facades with louvre windows, shops and signs; asphalt; paving with painted kerbs; laterite ground. Lighting, depth haze, phone shadows and MSAA were retuned, and there is a GRAPHICS choice on the start screen. Screenshots: `tests/view_game.gd`.
+- Balconies on many buildings (`City._balconies`); street lights and electric poles with wires along every kerb (`scripts/street_furniture.gd`, one merged mesh and one body per block).
+- Movable and resizable touch buttons, tilt steering with gas/brake pedals, a gyroscope camera and a settings screen: [docs/CONTROLS.md](docs/CONTROLS.md). Test: `tests/controls_test.gd`.
+- A Windows Desktop export preset (`build/windows/GardenCityStories.exe`).
+
 ### Online play (2026-11-02)
 
 - A start screen (`scenes/start.tscn`) offers solo, online through a cloud relay, host on this phone (same Wi-Fi) or join a Wi-Fi host. Online players spawn outside HOPE MEDICAL POINT (`StreetPlaces.clinic_spawn`), see each other animate and see the cars each other drives. Traffic and pedestrians stay local. Code: `scripts/net.gd` (autoload `Net`), `scripts/net_sync.gd`, `scripts/remote_player.gd`; relay server: `server/` with `render.yaml`. Setup and design: [docs/ONLINE.md](docs/ONLINE.md). Test: `tests/net_test.gd`.

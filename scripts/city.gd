@@ -7,6 +7,7 @@ const BUILDING_SHADER = preload("res://shaders/building.gdshader")
 const ASPHALT_SHADER = preload("res://shaders/asphalt.gdshader")
 const PAVEMENT_SHADER = preload("res://shaders/pavement.gdshader")
 const LATERITE_SHADER = preload("res://shaders/laterite.gdshader")
+const StreetFurniture = preload("res://scripts/street_furniture.gd")
 
 const BLOCK := 40.0
 const ROAD := 12.0
@@ -34,6 +35,12 @@ const RESERVED_LOTS := {
 	Vector2i(1, 3): [Vector2i(-1, -1), Vector2i(-1, 1)],
 	Vector2i(2, 1): [Vector2i(-1, 1), Vector2i(1, 1)],
 	Vector2i(3, 1): [Vector2i(-1, 1)],
+}
+## Block edges left without street lights or poles: the flyover deck spans
+## road 1 between blocks (0, 3) and (1, 3) (see scripts/street_places.gd).
+const NO_FURNITURE_EDGES := {
+	Vector2i(0, 3): [Vector2i(1, 0)],
+	Vector2i(1, 3): [Vector2i(-1, 0)],
 }
 ## Lot centres sit this far from their block's centre on each axis
 const LOT_OFFSET := 9.5
@@ -102,6 +109,7 @@ static func build(parent: Node3D, rng: RandomNumberGenerator) -> Dictionary:
 						rng.randf()
 					else:
 						_palm(chunk, lot, rng)
+			StreetFurniture.build(chunk, c, BLOCK / 2.0, NO_FURNITURE_EDGES.get(Vector2i(i, j), []))
 			for n in 6:
 				var along := rng.randf_range(-BLOCK / 2 + 2, BLOCK / 2 - 2)
 				var edge := (BLOCK / 2 - 1.2) * (1 if rng.randf() < 0.5 else -1)
@@ -242,6 +250,78 @@ static func _building(parent: Node3D, lot: Vector3, rng: RandomNumberGenerator) 
 	# Windows, shops, signs and weathering come from shaders/building.gdshader
 	_box(parent, size, lot + Vector3(0, size.y / 2, 0), color, true, _shader_material(BUILDING_SHADER, {"wall_color": color}))
 	_roof_details(parent, lot, size)
+	_balconies(parent, lot, size, color)
+
+
+## Concrete balconies with solid parapets on some buildings of three floors
+## or more, lined up with the window bays of shaders/building.gdshader (bays
+## every BAY_WIDTH metres of world position, floors every FLOOR_HEIGHT). All of
+## a building's balconies are one mesh. Chosen from a hash of the lot, so the
+## city's random numbers stay the same.
+const FLOOR_HEIGHT := 3.2
+const BAY_WIDTH := 2.9
+
+static func _balconies(parent: Node3D, lot: Vector3, size: Vector3, color: Color) -> void:
+	var h := absi(hash(Vector2i(roundi(lot.x * 3.0), roundi(lot.z * 3.0))))
+	var floors := floori(size.y / FLOOR_HEIGHT)
+	if floors < 3 or h % 3 == 0:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var used := false
+	# Facing +x, -x, +z, -z; each building gets two or three of them
+	var faces := [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]
+	for f in faces.size():
+		if (h >> (f + 2)) % 4 == 0:
+			continue
+		var normal: Vector3 = faces[f]
+		var along := Vector3(absf(normal.z), 0, absf(normal.x))
+		var half_out := size.x / 2.0 if normal.x != 0.0 else size.z / 2.0
+		var half_along := size.z / 2.0 if normal.x != 0.0 else size.x / 2.0
+		var wall := lot + normal * half_out
+		# World coordinate along the wall, as the shader measures it
+		var u_lo := (lot.z if normal.x != 0.0 else lot.x) - half_along
+		var u_hi := u_lo + half_along * 2.0
+		var parity := (h >> 7) % 2
+		for bx in range(ceili(u_lo / BAY_WIDTH), floori(u_hi / BAY_WIDTH)):
+			if posmod(bx, 2) != parity:
+				continue
+			var u_mid := (bx + 0.5) * BAY_WIDTH
+			if u_mid - BAY_WIDTH * 0.45 < u_lo + 0.3 or u_mid + BAY_WIDTH * 0.45 > u_hi - 0.3:
+				continue
+			for fy in range(1, floors):
+				if fy * FLOOR_HEIGHT + 2.6 > size.y - 0.9:
+					break
+				var centre := wall + along * (u_mid - (lot.z if normal.x != 0.0 else lot.x)) + Vector3(0, fy * FLOOR_HEIGHT, 0)
+				# A right-handed basis (x cross y = z), so faces keep their winding
+				_balcony(st, centre, normal, Vector3.UP.cross(normal))
+				used = true
+	if not used:
+		return
+	st.generate_normals()
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = st.commit()
+	mesh.material_override = Ragdoll.material(color.darkened(0.06))
+	parent.add_child(mesh)
+
+
+## One balcony: a slab sticking out of the wall at floor level, a front
+## parapet and two side parapets.
+static func _balcony(st: SurfaceTool, at: Vector3, normal: Vector3, along: Vector3) -> void:
+	const WIDTH := 2.5
+	const DEPTH := 1.05
+	const RAIL := 1.0
+	var basis := Basis(along, Vector3.UP, normal)
+	var pieces := [
+		[Vector3(0, 0.07, DEPTH / 2.0), Vector3(WIDTH, 0.14, DEPTH)],
+		[Vector3(0, 0.14 + RAIL / 2.0, DEPTH - 0.05), Vector3(WIDTH, RAIL, 0.1)],
+		[Vector3(-WIDTH / 2.0 + 0.05, 0.14 + RAIL / 2.0, DEPTH / 2.0), Vector3(0.1, RAIL, DEPTH)],
+		[Vector3(WIDTH / 2.0 - 0.05, 0.14 + RAIL / 2.0, DEPTH / 2.0), Vector3(0.1, RAIL, DEPTH)],
+	]
+	for piece: Array in pieces:
+		var box := BoxMesh.new()
+		box.size = piece[1]
+		st.append_from(box, 0, Transform3D(basis, at + basis * piece[0]))
 
 
 ## Black plastic water tanks and a stair housing on the roof, as on most

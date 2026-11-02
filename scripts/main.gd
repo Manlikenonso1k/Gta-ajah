@@ -18,6 +18,8 @@ const VehicleHud = preload("res://scripts/vehicle_hud.gd")
 const VehiclePersistence = preload("res://scripts/vehicle_persistence.gd")
 const Traffic = preload("res://scripts/traffic.gd")
 const NetSync = preload("res://scripts/net_sync.gd")
+const SettingsMenu = preload("res://scripts/settings_menu.gd")
+const ControlsEditor = preload("res://scripts/controls_editor.gd")
 const START_SCENE := "res://scenes/start.tscn"
 
 ## Models from VehicleModel.MODELS, cycled through the spawn points
@@ -39,6 +41,8 @@ var _perf_label: Label
 var _ped_debug_label: Label
 var _ped_inspection_enabled := false
 var _net_sync: Node = null
+var _settings: PanelContainer
+var _editor: PanelContainer
 
 
 func _ready() -> void:
@@ -382,6 +386,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _toggle_pause() -> void:
+	if _editor != null and _editor.visible:
+		_finish_layout()
+		return
+	if _settings != null and _settings.visible:
+		_close_settings()
+		return
 	_paused = not _paused
 	_phone.visible = _paused
 	get_tree().paused = _paused
@@ -462,6 +472,11 @@ func _build_phone_menu(layer: CanvasLayer) -> void:
 	resume.custom_minimum_size.y = 48
 	resume.pressed.connect(_toggle_pause)
 	layout.add_child(resume)
+	var settings_button := Button.new()
+	settings_button.text = "CONTROLS & SETTINGS"
+	settings_button.custom_minimum_size.y = 44
+	settings_button.pressed.connect(_open_settings)
+	layout.add_child(settings_button)
 	var quit_button := Button.new()
 	quit_button.text = "LEAVE ONLINE GAME" if _online() else "MAIN MENU"
 	quit_button.custom_minimum_size.y = 44
@@ -473,6 +488,45 @@ func _build_phone_menu(layer: CanvasLayer) -> void:
 	footer.add_theme_font_size_override("font_size", 12)
 	layout.add_child(footer)
 	get_viewport().size_changed.connect(_layout_phone)
+	_settings = PanelContainer.new()
+	_settings.set_script(SettingsMenu)
+	_settings.visible = false
+	layer.add_child(_settings)
+	_settings.closed.connect(_close_settings)
+	_settings.edit_layout_requested.connect(_edit_layout)
+	_editor = PanelContainer.new()
+	_editor.set_script(ControlsEditor)
+	_editor.visible = false
+	layer.add_child(_editor)
+	_editor.done.connect(_finish_layout)
+
+
+## Pause menu -> settings (the world stays paused throughout)
+func _open_settings() -> void:
+	_phone.visible = false
+	_settings.visible = true
+
+
+func _close_settings() -> void:
+	_settings.visible = false
+	_phone.visible = _paused
+
+
+## Settings -> moving the on-screen buttons over the paused game
+func _edit_layout() -> void:
+	if _touch == null:
+		return
+	_settings.visible = false
+	_touch.process_mode = Node.PROCESS_MODE_ALWAYS
+	_touch.visible = true
+	_editor.open(_touch)
+
+
+func _finish_layout() -> void:
+	_editor.close()
+	_touch.process_mode = Node.PROCESS_MODE_INHERIT
+	_touch.visible = not _paused
+	_settings.visible = true
 
 
 func _back_to_start() -> void:

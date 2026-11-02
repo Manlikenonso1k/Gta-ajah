@@ -2,6 +2,7 @@ extends Node3D
 ## Third-person orbit camera. Mouse to look; in a car it swings back behind
 ## the vehicle when the mouse is left alone.
 
+const ControlSettings = preload("res://scripts/control_settings.gd")
 const SENSITIVITY := 0.003
 
 var target: Node3D
@@ -51,7 +52,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.device == InputEvent.DEVICE_ID_EMULATION or OS.has_feature("mobile"):
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		look(event.relative)
+		look(event.relative * float(ControlSettings.get_value("look_sensitivity")))
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed:
