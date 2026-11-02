@@ -605,6 +605,12 @@ blender -b --python blender/make_mobile_cars.py
 godot --headless --path . --import
 ```
 
+On a fresh clone the mobile car GLBs are already committed, but their extracted textures (`*_Image_*.png`) are git-ignored and Godot will not extract them while the committed `.png.import` files exist. Without them the cars ship uncompressed embedded textures. Run this once before exporting:
+
+```bash
+tools/extract_car_textures.sh
+```
+
 For Godot 4.7.2 desktop export, install **OpenJDK 17** and the Android SDK packages listed in the [Godot 4.7 Android export guide](https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_android.html): Platform-Tools 35.0.0 or later, Build-Tools 35.0.1, Android Platform 35, Command-line Tools (latest), CMake 3.10.2.4988404 and NDK 28.1.13356709. In Godot Editor Settings → Export → Android, set the Java SDK and Android SDK paths. Install the matching **4.7.2 export templates** from Editor → Manage Export Templates.
 
 Create a local debug key (do not add this file or its passwords to git):
