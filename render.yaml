@@ -1,0 +1,11 @@
+# One-click deploy of the online relay (server/) on Render's free plan:
+# Render dashboard -> New -> Blueprint -> pick this repo.
+services:
+  - type: web
+    name: garden-city-relay
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /

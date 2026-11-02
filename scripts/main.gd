@@ -17,6 +17,8 @@ const PhoneMenu = preload("res://scripts/phone_menu.gd")
 const VehicleHud = preload("res://scripts/vehicle_hud.gd")
 const VehiclePersistence = preload("res://scripts/vehicle_persistence.gd")
 const Traffic = preload("res://scripts/traffic.gd")
+const NetSync = preload("res://scripts/net_sync.gd")
+const START_SCENE := "res://scenes/start.tscn"
 
 ## Models from VehicleModel.MODELS, cycled through the spawn points
 const CAR_MODELS := ["corolla", "camry", "benz_g", "bmw_e30", "accord", "hiace", "vw_t3",
@@ -36,6 +38,7 @@ var _perf_timer := 0.0
 var _perf_label: Label
 var _ped_debug_label: Label
 var _ped_inspection_enabled := false
+var _net_sync: Node = null
 
 
 func _ready() -> void:
@@ -49,7 +52,10 @@ func _ready() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
-	_saved_vehicle_states = VehiclePersistence.load_states()
+	# Online, every phone must start with the same parked cars, so the solo
+	# save of where cars were left isn't used (or written).
+	if not _online():
+		_saved_vehicle_states = VehiclePersistence.load_states()
 	var spawns := City.build(self, rng)
 	_chunks = spawns["chunks"]
 
@@ -78,6 +84,12 @@ func _ready() -> void:
 	_player = Player.new()
 	_player.camera_rig = rig
 	_player.position = Vector3(City.road_line(3) - 1, 0.2, 5)
+	if _online():
+		# Online players start outside HOPE MEDICAL POINT
+		var spawn := StreetPlaces.clinic_spawn(_net().my_id)
+		_player.position = spawn.origin
+		_player.rotation.y = spawn.basis.get_euler().y
+		rig.yaw = _player.rotation.y
 	add_child(_player)
 	var traffic := Traffic.new()
 	add_child(traffic)
@@ -85,6 +97,8 @@ func _ready() -> void:
 	_build_places(float(quality.get("pedestrians", 30)) / 30.0)
 
 	_setup_hud(rig)
+	if _online():
+		_start_net_sync()
 	_update_streaming()
 	_validate_loaded_vehicle_placements.call_deferred()
 
@@ -119,7 +133,36 @@ func _spawn_car(xform: Transform3D, model: String) -> void:
 	car.add_to_group("persistent_vehicles")
 
 
+## The Net autoload (scripts/net.gd); null when run without it (some tests).
+func _net() -> Node:
+	return get_node_or_null("/root/Net")
+
+
+func _online() -> bool:
+	var net := _net()
+	return net != null and net.online()
+
+
+func _start_net_sync() -> void:
+	_net_sync = NetSync.new()
+	_net_sync.name = "NetSync"
+	_net_sync.main = self
+	_net_sync.player = _player
+	add_child(_net_sync)
+	var status := Label.new()
+	status.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	status.position = Vector2(14.0, 10.0)
+	status.add_theme_font_size_override("font_size", 15)
+	status.add_theme_color_override("font_shadow_color", Color.BLACK)
+	status.add_theme_constant_override("shadow_offset_x", 1)
+	status.add_theme_constant_override("shadow_offset_y", 1)
+	_vehicle_hud.get_parent().add_child(status)
+	_net_sync.set_status_label(status)
+
+
 func save_vehicle_states() -> void:
+	if _online():
+		return
 	var vehicles := _saved_vehicle_states.duplicate(true)
 	for car in get_tree().get_nodes_in_group("persistent_vehicles"):
 		if not is_instance_valid(car) or car.persistent_id.is_empty():
@@ -198,6 +241,9 @@ func _update_streaming() -> void:
 		pedestrian.set_physics_process(near_player)
 		pedestrian.collision_layer = 4 if near_player else 0
 	for vehicle in get_tree().get_nodes_in_group("persistent_vehicles"):
+		# Moved by another online player's messages (scripts/net_sync.gd)
+		if vehicle.has_meta("net_remote_driver"):
+			continue
 		var vehicle_distance: float = vehicle.global_position.distance_to(focus.global_position)
 		var near_player: bool = vehicle_distance < load_radius + (0.0 if vehicle.freeze else 18.0)
 		var should_simulate: bool = near_player or vehicle.driver != null or vehicle.linear_velocity.length() >= 1.0
@@ -393,12 +439,26 @@ func _build_phone_menu(layer: CanvasLayer) -> void:
 	resume.custom_minimum_size.y = 48
 	resume.pressed.connect(_toggle_pause)
 	layout.add_child(resume)
+	var quit_button := Button.new()
+	quit_button.text = "LEAVE ONLINE GAME" if _online() else "MAIN MENU"
+	quit_button.custom_minimum_size.y = 44
+	quit_button.pressed.connect(_back_to_start)
+	layout.add_child(quit_button)
 	var footer := Label.new()
 	footer.text = "ESC / BACK  •  Garden City Stories"
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	footer.add_theme_font_size_override("font_size", 12)
 	layout.add_child(footer)
 	get_viewport().size_changed.connect(_layout_phone)
+
+
+func _back_to_start() -> void:
+	save_vehicle_states()
+	var net := _net()
+	if net != null:
+		net.leave()
+	get_tree().paused = false
+	get_tree().change_scene_to_file(START_SCENE)
 
 
 func _layout_phone() -> void:

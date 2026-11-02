@@ -23,3 +23,6 @@ assets/animations/mixamo/
 # Libraries built from the Mixamo clips (same licence limits as the clips)
 assets/animations/mixamo_*.res
 assets/animations/mixamo_*.tres
+
+# Online relay server dependencies
+server/node_modules/

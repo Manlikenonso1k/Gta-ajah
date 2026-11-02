@@ -11,8 +11,12 @@ config_version=5
 [application]
 
 config/name="GTA Port Harcourt"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/start.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+Net="*res://scripts/net.gd"
 
 [display]
 

@@ -200,6 +200,9 @@ func _try_enter_car() -> void:
 	var nearest: Node3D = null
 	var nearest_d := INF
 	for c in get_tree().get_nodes_in_group("cars"):
+		# Driven by another online player (scripts/net_sync.gd)
+		if c.has_meta("net_remote_driver"):
+			continue
 		var d := global_position.distance_to(c.global_position)
 		if c.has_method("driver_door_point"):
 			d = minf(d, global_position.distance_to(c.to_global(c.driver_door_point())))

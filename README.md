@@ -10,6 +10,11 @@ An open-world 3D game set in Port Harcourt, Nigeria, inspired by GTA Vice City. 
 
 This section is the handoff note between work sessions. It's kept current so a new session can pick up the work without reading the whole codebase. **Update it at the end of every step.**
 
+### Online play (2026-11-02)
+
+- A start screen (`scenes/start.tscn`) offers solo, online through a cloud relay, host on this phone (same Wi-Fi) or join a Wi-Fi host. Online players spawn outside HOPE MEDICAL POINT (`StreetPlaces.clinic_spawn`), see each other animate and see the cars each other drives. Traffic and pedestrians stay local. Code: `scripts/net.gd` (autoload `Net`), `scripts/net_sync.gd`, `scripts/remote_player.gd`; relay server: `server/` with `render.yaml`. Setup and design: [docs/ONLINE.md](docs/ONLINE.md). Test: `tests/net_test.gd`.
+- `tests/street_places_test.gd` already failed before this change (4 lying people with hips 0.8–1.1 m up without the Mixamo clips).
+
 ### Current task: Task 5, street life (`prompt-lead.md`, plan in `docs/PLAN_street_life.md`)
 
 - **Phase 1 done (2026-10-29):** pedestrians and the player play the owner's Mixamo clips (idle, walk, jog, run, sit, lie), chosen per character from `assets/animations/animation_sets.json` by gender and age tag and seeded by ID; the F4 inspector lists them. The clips and the library built from them (`tools/build_mixamo_library.sh` → `assets/animations/mixamo_library.res`) are git-ignored; without them the game uses the CC0 clips. `tests/animation_sets_test.gd` checks clips, sex limits and sit/lie heights. A crossing gap was fixed: crossing pedestrians now pass a slower person ahead instead of being stuck behind them.

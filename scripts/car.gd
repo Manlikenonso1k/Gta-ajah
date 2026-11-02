@@ -378,12 +378,15 @@ func ai_max_steer() -> float:
 
 
 func _on_bumper_body_entered(body: Node3D) -> void:
-	if body.has_method("hit_by_vehicle") and linear_velocity.length() > HIT_SPEED:
+	# A car driven by another online player is frozen here and moved by
+	# scripts/net_sync.gd, which stores its real velocity in this meta
+	var velocity: Vector3 = get_meta("net_velocity", linear_velocity)
+	if body.has_method("hit_by_vehicle") and velocity.length() > HIT_SPEED:
 		# Impact point and mass drive the realistic ragdoll; older 1-arg versions still work
 		if body.get_method_argument_count("hit_by_vehicle") >= 3:
-			body.hit_by_vehicle(linear_velocity, global_position, mass)
+			body.hit_by_vehicle(velocity, global_position, mass)
 		else:
-			body.hit_by_vehicle(linear_velocity)
+			body.hit_by_vehicle(velocity)
 
 
 ## Sliding door position, 0 closed to 1 open: it first steps out from the body,
